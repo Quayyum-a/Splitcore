@@ -1,0 +1,33 @@
+// Splitcore — Phase 1 schema.
+//
+// Phase 1 only needs enough here to support authentication. The full domain
+// model (venues, entertainers, QR codes, split rules, guest sessions, ledger
+// accounts, payments, payouts, webhook events) is Phase 2 onward, per the PRD.
+// Keeping this deliberately small now avoids modelling relationships before
+// the entities on the other end of them exist.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  PLATFORM_ADMIN
+  VENUE_ADMIN
+}
+
+model User {
+  id           String   @id @default(uuid())
+  email        String   @unique
+  passwordHash String   @map("password_hash")
+  role         Role
+  isActive     Boolean  @default(true) @map("is_active")
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  @@map("users")
+}

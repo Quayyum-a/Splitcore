@@ -1,0 +1,393 @@
+{
+  "pbtResults": {},
+  "executionHistory": {
+    "1. Install required dependencies for testing, security, and monitoring": [
+      {
+        "executionId": "fc95fca9-d74b-4b23-9d37-06c5fc4e8f2c",
+        "chatSessionId": "sess_57018f87-c41c-4a12-9070-a8743bdeb4c9",
+        "timestamp": 1789337450025
+      },
+      {
+        "executionId": "fc95fca9-d74b-4b23-9d37-06c5fc4e8f2c",
+        "chatSessionId": "sess_57018f87-c41c-4a12-9070-a8743bdeb4c9",
+        "timestamp": 1789337472060
+      },
+      {
+        "executionId": "fc95fca9-d74b-4b23-9d37-06c5fc4e8f2c",
+        "chatSessionId": "sess_57018f87-c41c-4a12-9070-a8743bdeb4c9",
+        "timestamp": 1789337689658
+      }
+    ],
+    "2. Configure Jest for comprehensive testing with coverage thresholds": [
+      {
+        "executionId": "fc95fca9-d74b-4b23-9d37-06c5fc4e8f2c",
+        "chatSessionId": "sess_57018f87-c41c-4a12-9070-a8743bdeb4c9",
+        "timestamp": 1789337450320
+      }
+    ],
+    "3.1 Create test/utils/test-helpers.ts with database setup functions": [
+      {
+        "executionId": "fc95fca9-d74b-4b23-9d37-06c5fc4e8f2c",
+        "chatSessionId": "sess_57018f87-c41c-4a12-9070-a8743bdeb4c9",
+        "timestamp": 1789337450493
+      }
+    ],
+    "3.2 Create test/utils/test-factories.ts with factory classes": [
+      {
+        "executionId": "fc95fca9-d74b-4b23-9d37-06c5fc4e8f2c",
+        "chatSessionId": "sess_57018f87-c41c-4a12-9070-a8743bdeb4c9",
+        "timestamp": 1789337450713
+      }
+    ],
+    "3.3 Create test/setup-e2e.ts for E2E test environment": [
+      {
+        "executionId": "fc95fca9-d74b-4b23-9d37-06c5fc4e8f2c",
+        "chatSessionId": "sess_57018f87-c41c-4a12-9070-a8743bdeb4c9",
+        "timestamp": 1789337450897
+      }
+    ],
+    "4.1 Create throttler configuration module": [
+      {
+        "executionId": "fc95fca9-d74b-4b23-9d37-06c5fc4e8f2c",
+        "chatSessionId": "sess_57018f87-c41c-4a12-9070-a8743bdeb4c9",
+        "timestamp": 1789337451058
+      }
+    ],
+    "4.2 Integrate throttler into AppModule": [
+      {
+        "executionId": "fc95fca9-d74b-4b23-9d37-06c5fc4e8f2c",
+        "chatSessionId": "sess_57018f87-c41c-4a12-9070-a8743bdeb4c9",
+        "timestamp": 1789337451266
+      }
+    ],
+    "5.1 Create CORS configuration": [
+      {
+        "executionId": "fc95fca9-d74b-4b23-9d37-06c5fc4e8f2c",
+        "chatSessionId": "sess_57018f87-c41c-4a12-9070-a8743bdeb4c9",
+        "timestamp": 1789337451418
+      }
+    ],
+    "5.2 Update main.ts with security middleware": [
+      {
+        "executionId": "fc95fca9-d74b-4b23-9d37-06c5fc4e8f2c",
+        "chatSessionId": "sess_57018f87-c41c-4a12-9070-a8743bdeb4c9",
+        "timestamp": 1789337451702
+      }
+    ],
+    "6.1 Create Sentry initialization file": [
+      {
+        "executionId": "fc95fca9-d74b-4b23-9d37-06c5fc4e8f2c",
+        "chatSessionId": "sess_57018f87-c41c-4a12-9070-a8743bdeb4c9",
+        "timestamp": 1789337452150
+      }
+    ],
+    "6.2 Update main.ts to import instrument.ts first": [
+      {
+        "executionId": "fc95fca9-d74b-4b23-9d37-06c5fc4e8f2c",
+        "chatSessionId": "sess_57018f87-c41c-4a12-9070-a8743bdeb4c9",
+        "timestamp": 1789337452585
+      }
+    ],
+    "6.3 Integrate Sentry into error handling": [
+      {
+        "executionId": "fc95fca9-d74b-4b23-9d37-06c5fc4e8f2c",
+        "chatSessionId": "sess_57018f87-c41c-4a12-9070-a8743bdeb4c9",
+        "timestamp": 1789337452746
+      }
+    ],
+    "7.1 Update Joi validation schema": [
+      {
+        "executionId": "fc95fca9-d74b-4b23-9d37-06c5fc4e8f2c",
+        "chatSessionId": "sess_57018f87-c41c-4a12-9070-a8743bdeb4c9",
+        "timestamp": 1789337452916
+      }
+    ],
+    "7.2 Update configuration service": [
+      {
+        "executionId": "fc95fca9-d74b-4b23-9d37-06c5fc4e8f2c",
+        "chatSessionId": "sess_57018f87-c41c-4a12-9070-a8743bdeb4c9",
+        "timestamp": 1789337453155
+      }
+    ],
+    "7.3 Create production environment example file": [
+      {
+        "executionId": "fc95fca9-d74b-4b23-9d37-06c5fc4e8f2c",
+        "chatSessionId": "sess_57018f87-c41c-4a12-9070-a8743bdeb4c9",
+        "timestamp": 1789337453308
+      }
+    ],
+    "8.1 Update Prisma schema with metrics preview feature": [
+      {
+        "executionId": "fc95fca9-d74b-4b23-9d37-06c5fc4e8f2c",
+        "chatSessionId": "sess_57018f87-c41c-4a12-9070-a8743bdeb4c9",
+        "timestamp": 1789337453473
+      }
+    ],
+    "8.2 Enhance PrismaService with connection pool configuration": [
+      {
+        "executionId": "fc95fca9-d74b-4b23-9d37-06c5fc4e8f2c",
+        "chatSessionId": "sess_57018f87-c41c-4a12-9070-a8743bdeb4c9",
+        "timestamp": 1789337453657
+      }
+    ],
+    "9.1 Create Swagger configuration module": [
+      {
+        "executionId": "fc95fca9-d74b-4b23-9d37-06c5fc4e8f2c",
+        "chatSessionId": "sess_57018f87-c41c-4a12-9070-a8743bdeb4c9",
+        "timestamp": 1789337453842
+      }
+    ],
+    "9.2 Update main.ts to setup Swagger": [
+      {
+        "executionId": "fc95fca9-d74b-4b23-9d37-06c5fc4e8f2c",
+        "chatSessionId": "sess_57018f87-c41c-4a12-9070-a8743bdeb4c9",
+        "timestamp": 1789337453985
+      }
+    ],
+    "9.3 Add Swagger decorators to DTOs and controllers": [
+      {
+        "executionId": "fc95fca9-d74b-4b23-9d37-06c5fc4e8f2c",
+        "chatSessionId": "sess_57018f87-c41c-4a12-9070-a8743bdeb4c9",
+        "timestamp": 1789337454495
+      }
+    ],
+    "10.1 Create worker module and entry point": [
+      {
+        "executionId": "fc95fca9-d74b-4b23-9d37-06c5fc4e8f2c",
+        "chatSessionId": "sess_57018f87-c41c-4a12-9070-a8743bdeb4c9",
+        "timestamp": 1789337454795
+      }
+    ],
+    "10.2 Implement graceful shutdown handling": [
+      {
+        "executionId": "fc95fca9-d74b-4b23-9d37-06c5fc4e8f2c",
+        "chatSessionId": "sess_57018f87-c41c-4a12-9070-a8743bdeb4c9",
+        "timestamp": 1789337454942
+      }
+    ],
+    "10.3 Enhance Redis service with retry logic": [
+      {
+        "executionId": "fc95fca9-d74b-4b23-9d37-06c5fc4e8f2c",
+        "chatSessionId": "sess_57018f87-c41c-4a12-9070-a8743bdeb4c9",
+        "timestamp": 1789337455095
+      }
+    ],
+    "10.4 Add worker npm scripts": [
+      {
+        "executionId": "fc95fca9-d74b-4b23-9d37-06c5fc4e8f2c",
+        "chatSessionId": "sess_57018f87-c41c-4a12-9070-a8743bdeb4c9",
+        "timestamp": 1789337455355
+      }
+    ],
+    "11.1 Create render.yaml blueprint": [
+      {
+        "executionId": "fc95fca9-d74b-4b23-9d37-06c5fc4e8f2c",
+        "chatSessionId": "sess_57018f87-c41c-4a12-9070-a8743bdeb4c9",
+        "timestamp": 1789337455553
+      }
+    ],
+    "11.2 Configure environment variables in render.yaml": [
+      {
+        "executionId": "fc95fca9-d74b-4b23-9d37-06c5fc4e8f2c",
+        "chatSessionId": "sess_57018f87-c41c-4a12-9070-a8743bdeb4c9",
+        "timestamp": 1789337455699
+      }
+    ],
+    "19. Checkpoint - Verify unit test coverage meets 80% threshold": [
+      {
+        "executionId": "fc95fca9-d74b-4b23-9d37-06c5fc4e8f2c",
+        "chatSessionId": "sess_57018f87-c41c-4a12-9070-a8743bdeb4c9",
+        "timestamp": 1789337455876
+      }
+    ],
+    "25. Checkpoint - Run all tests and verify CI pipeline": [
+      {
+        "executionId": "fc95fca9-d74b-4b23-9d37-06c5fc4e8f2c",
+        "chatSessionId": "sess_57018f87-c41c-4a12-9070-a8743bdeb4c9",
+        "timestamp": 1789337456076
+      }
+    ],
+    "26.1 Create system overview documentation": [
+      {
+        "executionId": "fc95fca9-d74b-4b23-9d37-06c5fc4e8f2c",
+        "chatSessionId": "sess_57018f87-c41c-4a12-9070-a8743bdeb4c9",
+        "timestamp": 1789337456314
+      }
+    ],
+    "26.2 Create module relationships documentation": [
+      {
+        "executionId": "fc95fca9-d74b-4b23-9d37-06c5fc4e8f2c",
+        "chatSessionId": "sess_57018f87-c41c-4a12-9070-a8743bdeb4c9",
+        "timestamp": 1789337456766
+      }
+    ],
+    "26.3 Create authentication flow documentation": [
+      {
+        "executionId": "fc95fca9-d74b-4b23-9d37-06c5fc4e8f2c",
+        "chatSessionId": "sess_57018f87-c41c-4a12-9070-a8743bdeb4c9",
+        "timestamp": 1789337456964
+      }
+    ],
+    "26.4 Create request lifecycle documentation": [
+      {
+        "executionId": "fc95fca9-d74b-4b23-9d37-06c5fc4e8f2c",
+        "chatSessionId": "sess_57018f87-c41c-4a12-9070-a8743bdeb4c9",
+        "timestamp": 1789337457113
+      }
+    ],
+    "26.5 Create queue processing documentation": [
+      {
+        "executionId": "fc95fca9-d74b-4b23-9d37-06c5fc4e8f2c",
+        "chatSessionId": "sess_57018f87-c41c-4a12-9070-a8743bdeb4c9",
+        "timestamp": 1789337457318
+      }
+    ],
+    "26.6 Create error handling documentation": [
+      {
+        "executionId": "fc95fca9-d74b-4b23-9d37-06c5fc4e8f2c",
+        "chatSessionId": "sess_57018f87-c41c-4a12-9070-a8743bdeb4c9",
+        "timestamp": 1789337457542
+      }
+    ],
+    "26.7 Create logging strategy documentation": [
+      {
+        "executionId": "fc95fca9-d74b-4b23-9d37-06c5fc4e8f2c",
+        "chatSessionId": "sess_57018f87-c41c-4a12-9070-a8743bdeb4c9",
+        "timestamp": 1789337457755
+      }
+    ],
+    "26.8 Create database schema documentation": [
+      {
+        "executionId": "fc95fca9-d74b-4b23-9d37-06c5fc4e8f2c",
+        "chatSessionId": "sess_57018f87-c41c-4a12-9070-a8743bdeb4c9",
+        "timestamp": 1789337458022
+      }
+    ],
+    "27.1 Create infrastructure setup guide": [
+      {
+        "executionId": "fc95fca9-d74b-4b23-9d37-06c5fc4e8f2c",
+        "chatSessionId": "sess_57018f87-c41c-4a12-9070-a8743bdeb4c9",
+        "timestamp": 1789337458262
+      }
+    ],
+    "27.2 Create Render deployment guide": [
+      {
+        "executionId": "fc95fca9-d74b-4b23-9d37-06c5fc4e8f2c",
+        "chatSessionId": "sess_57018f87-c41c-4a12-9070-a8743bdeb4c9",
+        "timestamp": 1789337458424
+      }
+    ],
+    "27.3 Create database migration guide": [
+      {
+        "executionId": "fc95fca9-d74b-4b23-9d37-06c5fc4e8f2c",
+        "chatSessionId": "sess_57018f87-c41c-4a12-9070-a8743bdeb4c9",
+        "timestamp": 1789337458611
+      }
+    ],
+    "27.4 Create troubleshooting guide": [
+      {
+        "executionId": "fc95fca9-d74b-4b23-9d37-06c5fc4e8f2c",
+        "chatSessionId": "sess_57018f87-c41c-4a12-9070-a8743bdeb4c9",
+        "timestamp": 1789337458963
+      }
+    ],
+    "28. Generate API documentation": [
+      {
+        "executionId": "fc95fca9-d74b-4b23-9d37-06c5fc4e8f2c",
+        "chatSessionId": "sess_57018f87-c41c-4a12-9070-a8743bdeb4c9",
+        "timestamp": 1789337459307
+      }
+    ],
+    "29. Verify all requirements are met": [
+      {
+        "executionId": "fc95fca9-d74b-4b23-9d37-06c5fc4e8f2c",
+        "chatSessionId": "sess_57018f87-c41c-4a12-9070-a8743bdeb4c9",
+        "timestamp": 1789337459484
+      }
+    ],
+    "30.1 Verify all tests passing (unit + E2E)": [
+      {
+        "executionId": "fc95fca9-d74b-4b23-9d37-06c5fc4e8f2c",
+        "chatSessionId": "sess_57018f87-c41c-4a12-9070-a8743bdeb4c9",
+        "timestamp": 1789337459651
+      }
+    ],
+    "30.2 Verify code coverage >= 80%": [
+      {
+        "executionId": "fc95fca9-d74b-4b23-9d37-06c5fc4e8f2c",
+        "chatSessionId": "sess_57018f87-c41c-4a12-9070-a8743bdeb4c9",
+        "timestamp": 1789337459820
+      }
+    ],
+    "30.3 Verify security middleware configured (rate limiting, CORS, helmet)": [
+      {
+        "executionId": "fc95fca9-d74b-4b23-9d37-06c5fc4e8f2c",
+        "chatSessionId": "sess_57018f87-c41c-4a12-9070-a8743bdeb4c9",
+        "timestamp": 1789337459962
+      }
+    ],
+    "30.4 Verify monitoring integrated (Sentry with error capture)": [
+      {
+        "executionId": "fc95fca9-d74b-4b23-9d37-06c5fc4e8f2c",
+        "chatSessionId": "sess_57018f87-c41c-4a12-9070-a8743bdeb4c9",
+        "timestamp": 1789337460204
+      }
+    ],
+    "30.5 Verify environment validation working": [
+      {
+        "executionId": "fc95fca9-d74b-4b23-9d37-06c5fc4e8f2c",
+        "chatSessionId": "sess_57018f87-c41c-4a12-9070-a8743bdeb4c9",
+        "timestamp": 1789337460370
+      }
+    ],
+    "30.6 Verify database connection pooling configured": [
+      {
+        "executionId": "fc95fca9-d74b-4b23-9d37-06c5fc4e8f2c",
+        "chatSessionId": "sess_57018f87-c41c-4a12-9070-a8743bdeb4c9",
+        "timestamp": 1789337460547
+      }
+    ],
+    "30.7 Verify API documentation generated and accessible": [
+      {
+        "executionId": "fc95fca9-d74b-4b23-9d37-06c5fc4e8f2c",
+        "chatSessionId": "sess_57018f87-c41c-4a12-9070-a8743bdeb4c9",
+        "timestamp": 1789337460726
+      }
+    ],
+    "30.8 Verify worker process configured with graceful shutdown": [
+      {
+        "executionId": "fc95fca9-d74b-4b23-9d37-06c5fc4e8f2c",
+        "chatSessionId": "sess_57018f87-c41c-4a12-9070-a8743bdeb4c9",
+        "timestamp": 1789337460903
+      }
+    ],
+    "30.9 Verify deployment configuration complete (render.yaml)": [
+      {
+        "executionId": "fc95fca9-d74b-4b23-9d37-06c5fc4e8f2c",
+        "chatSessionId": "sess_57018f87-c41c-4a12-9070-a8743bdeb4c9",
+        "timestamp": 1789337461050
+      }
+    ],
+    "30.10 Verify architecture documentation complete": [
+      {
+        "executionId": "fc95fca9-d74b-4b23-9d37-06c5fc4e8f2c",
+        "chatSessionId": "sess_57018f87-c41c-4a12-9070-a8743bdeb4c9",
+        "timestamp": 1789337461200
+      }
+    ],
+    "30.11 Verify deployment guide complete": [
+      {
+        "executionId": "fc95fca9-d74b-4b23-9d37-06c5fc4e8f2c",
+        "chatSessionId": "sess_57018f87-c41c-4a12-9070-a8743bdeb4c9",
+        "timestamp": 1789337461343
+      }
+    ],
+    "30.12 Verify troubleshooting guide complete": [
+      {
+        "executionId": "fc95fca9-d74b-4b23-9d37-06c5fc4e8f2c",
+        "chatSessionId": "sess_57018f87-c41c-4a12-9070-a8743bdeb4c9",
+        "timestamp": 1789337461485
+      }
+    ]
+  }
+}
