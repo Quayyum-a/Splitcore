@@ -1,0 +1,99 @@
+services:
+  # API Web Service
+  - type: web
+    name: splitcore-api
+    runtime: node
+    region: oregon
+    plan: starter
+    buildCommand: npm ci && npx prisma generate && npm run build
+    startCommand: npm run start:prod
+    healthCheckPath: /health
+    autoDeploy: true
+    branch: main
+    
+    envVars:
+      - key: NODE_ENV
+        value: production
+      
+      - key: PORT
+        value: 3000
+      
+      - key: DATABASE_URL
+        sync: false
+        # Set in Render dashboard:
+        # postgresql://postgres:PASSWORD@db.PROJECT_REF.supabase.co:5432/postgres?sslmode=require&pgbouncer=true&connection_limit=10
+      
+      - key: REDIS_HOST
+        sync: false
+        # Set in Render dashboard from Upstash
+      
+      - key: REDIS_PORT
+        value: 6379
+      
+      - key: REDIS_PASSWORD
+        sync: false
+        # Set in Render dashboard from Upstash
+      
+      - key: JWT_SECRET
+        generateValue: true
+        # Or set manually to a secure random string (min 32 chars)
+      
+      - key: JWT_EXPIRES_IN
+        value: 7d
+      
+      - key: SENTRY_DSN
+        sync: false
+        # Set in Render dashboard from Sentry project
+      
+      - key: SENTRY_TRACES_SAMPLE_RATE
+        value: 0.1
+      
+      - key: LOG_LEVEL
+        value: info
+
+  # Queue Worker Service
+  - type: worker
+    name: splitcore-worker
+    runtime: node
+    region: oregon
+    plan: starter
+    buildCommand: npm ci && npx prisma generate && npm run build
+    startCommand: npm run start:worker:prod
+    autoDeploy: true
+    branch: main
+    
+    envVars:
+      - key: NODE_ENV
+        value: production
+      
+      - key: DATABASE_URL
+        sync: false
+        # Must match API service DATABASE_URL
+      
+      - key: REDIS_HOST
+        sync: false
+        # Must match API service REDIS_HOST
+      
+      - key: REDIS_PORT
+        value: 6379
+      
+      - key: REDIS_PASSWORD
+        sync: false
+        # Must match API service REDIS_PASSWORD
+      
+      - key: JWT_SECRET
+        sync: false
+        # Must match API service JWT_SECRET
+      
+      - key: JWT_EXPIRES_IN
+        value: 7d
+      
+      - key: SENTRY_DSN
+        sync: false
+        # Set in Render dashboard from Sentry project
+      
+      - key: SENTRY_TRACES_SAMPLE_RATE
+        value: 0.1
+      
+      - key: LOG_LEVEL
+        value: info
