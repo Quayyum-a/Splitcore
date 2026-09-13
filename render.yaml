@@ -5,7 +5,7 @@ services:
     runtime: node
     region: oregon
     plan: starter
-    buildCommand: npm ci && npx prisma generate && npm run build
+    buildCommand: npm ci --include=dev && npx prisma generate && npm run build
     startCommand: npm run start:prod
     healthCheckPath: /health
     autoDeploy: true
@@ -31,10 +31,7 @@ services:
         value: 6379
       
       - key: REDIS_PASSWORD
-        sync: false
-        # Set in Render dashboard from Upstash
-      
-      - key: JWT_SECRET
+        sync:        sync:        sync:        sync:        sync:        sync:        sync_SECRET
         generateValue: true
         # Or set manually to a secure random string (min 32 chars)
       
@@ -57,7 +54,7 @@ services:
     runtime: node
     region: oregon
     plan: starter
-    buildCommand: npm ci && npx prisma generate && npm run build
+    buildCommand: npm ci --include=dev && npx prisma generate && npm run build
     startCommand: npm run start:worker:prod
     autoDeploy: true
     branch: main
