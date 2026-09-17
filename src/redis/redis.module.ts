@@ -20,6 +20,7 @@ export const REDIS_CLIENT = 'REDIS_CLIENT';
           host: config.get<string>('redis.host'),
           port: config.get<number>('redis.port'),
           password: config.get<string>('redis.password'),
+          tls: {},
           // BullMQ's own connections set this themselves, but a shared
           // general-purpose client benefits from limited retry attempts
           // so a persistently-unreachable Redis fails loudly instead of
