@@ -1,7 +1,10 @@
 import { Body, Controller, HttpCode, HttpStatus, Post } from '@nestjs/common';
+import { ApiTags, ApiOperation, ApiResponse, ApiBody } from '@nestjs/swagger';
 import { AuthService } from './auth.service';
 import { LoginDto } from './dto/login.dto';
+import { Public } from '../common/decorators/public.decorator';
 
+@ApiTags('auth')
 @Controller('auth')
 export class AuthController {
   constructor(private readonly authService: AuthService) {}
@@ -12,7 +15,13 @@ export class AuthController {
   // money has no business exposing an open registration endpoint for the
   // accounts that control payout configuration.
   @Post('login')
+  @Public()
   @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'User login', description: 'Authenticate with email and password to receive a JWT token' })
+  @ApiBody({ type: LoginDto })
+  @ApiResponse({ status: 200, description: 'Login successful. Returns JWT access token and user details.' })
+  @ApiResponse({ status: 401, description: 'Unauthorized. Invalid credentials.' })
+  @ApiResponse({ status: 400, description: 'Bad Request. Validation failed.' })
   async login(@Body() dto: LoginDto) {
     const user = await this.authService.validateUser(dto.email, dto.password);
     return this.authService.login(user);
