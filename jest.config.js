@@ -7,17 +7,19 @@ module.exports = {
   },
   collectCoverageFrom: [
     '**/*.(t|j)s',
-    '!**/*.module.ts',
+    '!**/*.spec.ts',
+    '!**/node_modules/**',
+    '!**/dist/**',
+    '!**/test/**',
+    '!**/prisma/migrations/**',
+    '!**/prisma/seed.ts',
+    '!**/*.config.ts',
     '!**/main.ts',
     '!**/worker.ts',
-    '!**/instrument.ts',
-    '!**/*.interface.ts',
-    '!**/*.config.ts',
-    '!**/index.ts',
   ],
   coverageDirectory: '../coverage',
-  testEnvironment: 'node',
-  coverageThreshold: {
+  coverageReporters: ['json', 'lcov', 'text', 'html'],
+  coverageThresholds: {
     global: {
       statements: 80,
       branches: 80,
@@ -25,14 +27,8 @@ module.exports = {
       lines: 80,
     },
   },
-  coverageReporters: ['json', 'lcov', 'text', 'html'],
-  coveragePathIgnorePatterns: [
-    '/node_modules/',
-    '/dist/',
-    '/coverage/',
-    '.module.ts$',
-    'main.ts$',
-    'worker.ts$',
-    'instrument.ts$',
-  ],
+  testEnvironment: 'node',
+  moduleNameMapper: {
+    '^src/(.*)$': '<rootDir>/$1',
+  },
 };

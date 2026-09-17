@@ -25,7 +25,7 @@ import { HealthModule } from './health/health.module';
     LoggerModule,
     PrismaModule,
     RedisModule,
-    // QueueModule, // TODO: Re-enable after fixing Redis config
+    QueueModule,
     AuthModule,
     HealthModule,
   ],
