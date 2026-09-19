@@ -1,3 +1,5 @@
+// MUST be imported first to initialize Sentry before any other imports
+import './instrument';
 import { NestFactory } from '@nestjs/core';
 import { ConfigService } from '@nestjs/config';
 import { Logger } from 'nestjs-pino';

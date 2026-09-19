@@ -1,6 +1,7 @@
 import { ArgumentsHost, Catch, ExceptionFilter, HttpException, HttpStatus } from '@nestjs/common';
 import { Request, Response } from 'express';
 import { Logger } from 'nestjs-pino';
+import * as Sentry from '@sentry/nestjs';
 
 interface ErrorResponseBody {
   statusCode: number;
@@ -39,6 +40,23 @@ export class AllExceptionsFilter implements ExceptionFilter {
       path: request.url,
       timestamp: new Date().toISOString(),
     };
+
+    // Capture exceptions in Sentry for 5xx errors (500-599 status codes)
+    if (statusCode >= 500 && statusCode < 600) {
+      Sentry.captureException(exception, {
+        contexts: {
+          http: {
+            method: request.method,
+            url: request.url,
+            status_code: statusCode,
+          },
+        },
+        user: request.user ? {
+          id: (request.user as any).userId,
+          role: (request.user as any).role,
+        } : undefined,
+      });
+    }
 
     // Anything not deliberately thrown as an HttpException is, by
     // definition, a bug or an unhandled edge case — those get logged with

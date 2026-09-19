@@ -19,14 +19,6 @@ if (SENTRY_DSN) {
     
     integrations: [
       nodeProfilingIntegration(),
-      
-      // HTTP instrumentation
-      new Sentry.Integrations.Http({ tracing: true }),
-      
-      // Express instrumentation (NestJS uses Express internally)
-      new Sentry.Integrations.Express({ 
-        app: undefined // Will be set by NestJS integration
-      }),
     ],
     
     // Filter sensitive data

@@ -45,10 +45,6 @@ if (SENTRY_DSN) {
         profilesSampleRate: NODE_ENV === 'production' ? 0.1 : 1.0,
         integrations: [
             (0, profiling_node_1.nodeProfilingIntegration)(),
-            new Sentry.Integrations.Http({ tracing: true }),
-            new Sentry.Integrations.Express({
-                app: undefined
-            }),
         ],
         beforeSend(event, hint) {
             if (event.request) {
