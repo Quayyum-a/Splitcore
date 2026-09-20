@@ -6,6 +6,7 @@ import { LoggerModule } from '../common/logger/logger.module';
 import { PrismaModule } from '../prisma/prisma.module';
 import { RedisModule } from '../redis/redis.module';
 import { QueueModule } from '../queue/queue.module';
+import { QueueProcessorsModule } from '../queue/queue-processors.module';
 
 /**
  * WorkerModule is the root module for the queue worker process.
@@ -15,7 +16,8 @@ import { QueueModule } from '../queue/queue.module';
  * - LoggerModule: Structured logging via pino
  * - PrismaModule: Database access
  * - RedisModule: Redis connection for BullMQ
- * - QueueModule: Job processors and queue configuration
+ * - QueueModule: Queue configuration (shared with API server)
+ * - QueueProcessorsModule: Job processors (WORKER ONLY)
  * 
  * This module is used by src/worker.ts (worker entry point),
  * NOT src/main.ts (API server entry point).
@@ -32,6 +34,7 @@ import { QueueModule } from '../queue/queue.module';
     PrismaModule,
     RedisModule,
     QueueModule,
+    QueueProcessorsModule, // Only import processors in worker
   ],
 })
 export class WorkerModule {}

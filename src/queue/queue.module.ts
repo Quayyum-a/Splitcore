@@ -1,19 +1,22 @@
 import { Module } from '@nestjs/common';
 import { BullModule } from '@nestjs/bullmq';
 import { ConfigService } from '@nestjs/config';
-import { DiagnosticsProcessor } from './diagnostics.processor';
 
 export const DIAGNOSTICS_QUEUE = 'diagnostics';
 
-// Registers the shared BullMQ connection once, globally, so every future
-// queue (webhook processing, payout retries, reconciliation jobs) just
-// declares itself with BullModule.registerQueue() without repeating Redis
-// connection details.
-//
-// The "diagnostics" queue below isn't a real business queue — it exists so
-// Phase 1 has one working end-to-end example (enqueue -> process) that
-// later phases can copy the shape of, and so this module is provably
-// exercised rather than just present.
+/**
+ * QueueModule configures BullMQ connection and registers queues.
+ * 
+ * This module is imported by BOTH:
+ * - AppModule (API server): Needs queue connection to enqueue jobs
+ * - WorkerModule (worker process): Needs queue connection to process jobs
+ * 
+ * IMPORTANT: This module does NOT include processors.
+ * Processors are registered separately in QueueProcessorsModule,
+ * which is ONLY imported by WorkerModule.
+ * 
+ * This separation prevents the API server from accidentally starting workers.
+ */
 @Module({
   imports: [
     BullModule.forRootAsync({
@@ -23,7 +26,7 @@ export const DIAGNOSTICS_QUEUE = 'diagnostics';
           host: config.get<string>('redis.host'),
           port: config.get<number>('redis.port'),
           password: config.get<string>('redis.password'),
-          tls: {},
+          tls: config.get<string>('redis.password') ? {} : undefined,
         },
       }),
     }),
@@ -31,7 +34,6 @@ export const DIAGNOSTICS_QUEUE = 'diagnostics';
       name: DIAGNOSTICS_QUEUE,
     }),
   ],
-  providers: [DiagnosticsProcessor],
   exports: [BullModule],
 })
 export class QueueModule {}
