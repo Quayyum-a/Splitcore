@@ -1,6 +1,7 @@
 import { Controller, Get, Inject } from '@nestjs/common';
 import { HealthCheck, HealthCheckService, HealthIndicatorResult } from '@nestjs/terminus';
 import { ApiTags, ApiOperation, ApiResponse } from '@nestjs/swagger';
+import { SkipThrottle } from '@nestjs/throttler';
 import type { Redis } from 'ioredis';
 import { Public } from '../common/decorators/public.decorator';
 import { PrismaService } from '../prisma/prisma.service';
@@ -9,6 +10,9 @@ import { REDIS_CLIENT } from '../redis/redis.module';
 // Public, unauthenticated, and deliberately boring. This is what a load
 // balancer or an uptime monitor hits every few seconds — it should say
 // "database reachable, Redis reachable" and nothing more.
+//
+// @SkipThrottle() exempts this endpoint from rate limiting so health checks
+// from Render, monitoring tools, and load balancers don't get throttled.
 @ApiTags('health')
 @Controller('health')
 export class HealthController {
@@ -20,6 +24,7 @@ export class HealthController {
 
   @Get()
   @Public()
+  @SkipThrottle()
   @HealthCheck()
   @ApiOperation({ summary: 'Health check', description: 'Check the health status of the API, database, and Redis' })
   @ApiResponse({ status: 200, description: 'All systems operational' })
