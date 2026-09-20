@@ -25,15 +25,18 @@ services:
       
       - key: REDIS_HOST
         sync: false
-        # Set in Render dashboard from Upstash
+        # Set in Render dashboard from Upstash (e.g., your-instance.upstash.io)
       
       - key: REDIS_PORT
         value: 6379
       
       - key: REDIS_PASSWORD
-        sync:        sync:        sync:        sync:        sync:        sync:        sync_SECRET
+        sync: false
+        # Set in Render dashboard from Upstash
+      
+      - key: JWT_SECRET
         generateValue: true
-        # Or set manually to a secure random string (min 32 chars)
+        # Auto-generated secure random string (or set manually, min 32 chars)
       
       - key: JWT_EXPIRES_IN
         value: 7d
