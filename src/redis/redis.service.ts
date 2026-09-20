@@ -29,6 +29,8 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
     const port = this.configService.get<number>('redis.port')!;
     const password = this.configService.get<string>('redis.password');
 
+    this.logger.log(`Connecting to Redis at ${host}:${port}...`);
+
     this.client = new Redis({
       host,
       port,
@@ -36,6 +38,8 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
       maxRetriesPerRequest: 3,
       enableReadyCheck: true,
       connectTimeout: 10000, // 10 second connection timeout
+      // Enable TLS for Upstash and other cloud Redis providers
+      tls: password ? {} : undefined,
       retryStrategy: (times: number) => {
         if (times > this.maxReconnectAttempts) {
           this.logger.error(
@@ -55,8 +59,12 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
       this.reconnectAttempts = 0;
     });
 
+    this.client.on('ready', () => {
+      this.logger.log('Redis client ready');
+    });
+
     this.client.on('error', (error) => {
-      this.logger.error('Redis connection error:', error);
+      this.logger.error(`Redis connection error: ${error.message}`);
       this.isConnected = false;
     });
 
@@ -70,7 +78,7 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
       await this.client.ping();
       this.logger.log('Redis ping successful');
     } catch (error) {
-      this.logger.error('Redis initial connection failed', error);
+      this.logger.error('Redis initial connection failed:', error);
       throw error;
     }
   }

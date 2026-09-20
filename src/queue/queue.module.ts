@@ -21,14 +21,20 @@ export const DIAGNOSTICS_QUEUE = 'diagnostics';
   imports: [
     BullModule.forRootAsync({
       inject: [ConfigService],
-      useFactory: (config: ConfigService) => ({
-        connection: {
-          host: config.get<string>('redis.host'),
-          port: config.get<number>('redis.port'),
-          password: config.get<string>('redis.password'),
-          tls: config.get<string>('redis.password') ? {} : undefined,
-        },
-      }),
+      useFactory: (config: ConfigService) => {
+        const password = config.get<string>('redis.password');
+        
+        return {
+          connection: {
+            host: config.get<string>('redis.host'),
+            port: config.get<number>('redis.port'),
+            password,
+            // Enable TLS for cloud Redis providers (Upstash, Redis Cloud, etc.)
+            // Upstash requires TLS even on port 6379
+            tls: password ? {} : undefined,
+          },
+        };
+      },
     }),
     BullModule.registerQueue({
       name: DIAGNOSTICS_QUEUE,
