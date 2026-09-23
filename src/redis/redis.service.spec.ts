@@ -231,7 +231,12 @@ describe('RedisService', () => {
       await service.onModuleInit();
 
       // Extract retry strategy from Redis constructor call
-      const redisConstructorCall = (Redis as jest.MockedClass<typeof Redis>).mock.calls[0][0];
+      const redisMock = Redis as jest.MockedClass<typeof Redis>;
+      const calls = redisMock.mock.calls as Array<any[]>;
+      if (calls.length === 0 || !calls[0] || !calls[0][0]) {
+        throw new Error('Redis constructor was not called with expected arguments');
+      }
+      const redisConstructorCall = calls[0][0];
       retryStrategy = redisConstructorCall.retryStrategy;
     });
 
