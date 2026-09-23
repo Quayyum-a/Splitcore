@@ -13,8 +13,12 @@ import { QueueModule } from './queue/queue.module';
 import { AuthModule } from './auth/auth.module';
 import { JwtAuthGuard } from './auth/guards/jwt-auth.guard';
 import { RolesGuard } from './auth/guards/roles.guard';
+import { VenueScopedGuard } from './common/guards/venue-scoped.guard';
 import { HealthModule } from './health/health.module';
 import { getThrottlerModuleOptions } from './common/throttler/throttler.config';
+import { VenuesModule } from './venues/venues.module';
+import { EntertainersModule } from './entertainers/entertainers.module';
+import { QrCodesModule } from './qr-codes/qr-codes.module';
 
 @Module({
   imports: [
@@ -31,6 +35,9 @@ import { getThrottlerModuleOptions } from './common/throttler/throttler.config';
     QueueModule,
     AuthModule,
     HealthModule,
+    VenuesModule,
+    EntertainersModule,
+    QrCodesModule,
   ],
   providers: [
     // Runs on every request unless explicitly opted out with @Public().
@@ -38,6 +45,9 @@ import { getThrottlerModuleOptions } from './common/throttler/throttler.config';
     // Runs after JwtAuthGuard; only blocks routes carrying an explicit
     // @Roles() requirement, so it's a no-op everywhere else.
     { provide: APP_GUARD, useClass: RolesGuard },
+    // Runs after RolesGuard; only blocks routes marked with @VenueScoped(),
+    // ensuring VENUE_ADMIN users can only access their assigned venue.
+    { provide: APP_GUARD, useClass: VenueScopedGuard },
     // Rate limiting runs after authentication and authorization guards.
     // This ensures legitimate users aren't unfairly throttled during auth checks.
     { provide: APP_GUARD, useClass: ThrottlerGuard },
