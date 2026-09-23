@@ -1,0 +1,392 @@
+{
+  "pbtResults": {},
+  "executionHistory": {
+    "1. Fix TypeScript compilation error in Redis service test": [
+      {
+        "executionId": "6e664c20-3fad-4fec-85af-f27d7f436eb4",
+        "chatSessionId": "sess_07bd2924-ac52-4fd1-90cc-6a3ff2d2cde0",
+        "timestamp": 1790030539285
+      },
+      {
+        "executionId": "6e664c20-3fad-4fec-85af-f27d7f436eb4",
+        "chatSessionId": "sess_07bd2924-ac52-4fd1-90cc-6a3ff2d2cde0",
+        "timestamp": 1790030608584
+      },
+      {
+        "executionId": "6e664c20-3fad-4fec-85af-f27d7f436eb4",
+        "chatSessionId": "sess_07bd2924-ac52-4fd1-90cc-6a3ff2d2cde0",
+        "timestamp": 1790031018370
+      }
+    ],
+    "2.1 Add KycStatus enum and extend User model": [
+      {
+        "executionId": "6e664c20-3fad-4fec-85af-f27d7f436eb4",
+        "chatSessionId": "sess_07bd2924-ac52-4fd1-90cc-6a3ff2d2cde0",
+        "timestamp": 1790030543508
+      },
+      {
+        "executionId": "6e664c20-3fad-4fec-85af-f27d7f436eb4",
+        "chatSessionId": "sess_07bd2924-ac52-4fd1-90cc-6a3ff2d2cde0",
+        "timestamp": 1790031026776
+      },
+      {
+        "executionId": "6e664c20-3fad-4fec-85af-f27d7f436eb4",
+        "chatSessionId": "sess_07bd2924-ac52-4fd1-90cc-6a3ff2d2cde0",
+        "timestamp": 1790031172997
+      }
+    ],
+    "2.2 Create Venue and Entertainer models": [
+      {
+        "executionId": "6e664c20-3fad-4fec-85af-f27d7f436eb4",
+        "chatSessionId": "sess_07bd2924-ac52-4fd1-90cc-6a3ff2d2cde0",
+        "timestamp": 1790030548430
+      },
+      {
+        "executionId": "6e664c20-3fad-4fec-85af-f27d7f436eb4",
+        "chatSessionId": "sess_07bd2924-ac52-4fd1-90cc-6a3ff2d2cde0",
+        "timestamp": 1790031027373
+      },
+      {
+        "executionId": "6e664c20-3fad-4fec-85af-f27d7f436eb4",
+        "chatSessionId": "sess_07bd2924-ac52-4fd1-90cc-6a3ff2d2cde0",
+        "timestamp": 1790031173729
+      }
+    ],
+    "2.3 Create VenueEntertainer join table": [
+      {
+        "executionId": "6e664c20-3fad-4fec-85af-f27d7f436eb4",
+        "chatSessionId": "sess_07bd2924-ac52-4fd1-90cc-6a3ff2d2cde0",
+        "timestamp": 1790030551819
+      },
+      {
+        "executionId": "6e664c20-3fad-4fec-85af-f27d7f436eb4",
+        "chatSessionId": "sess_07bd2924-ac52-4fd1-90cc-6a3ff2d2cde0",
+        "timestamp": 1790031493288
+      },
+      {
+        "executionId": "fdaa13be-2a6d-456c-9f2a-7ab3af981775",
+        "chatSessionId": "sess_07bd2924-ac52-4fd1-90cc-6a3ff2d2cde0",
+        "timestamp": 1790158383135
+      }
+    ],
+    "2.4 Create QrCode and GuestSession models": [
+      {
+        "executionId": "6e664c20-3fad-4fec-85af-f27d7f436eb4",
+        "chatSessionId": "sess_07bd2924-ac52-4fd1-90cc-6a3ff2d2cde0",
+        "timestamp": 1790030557956
+      },
+      {
+        "executionId": "6e664c20-3fad-4fec-85af-f27d7f436eb4",
+        "chatSessionId": "sess_07bd2924-ac52-4fd1-90cc-6a3ff2d2cde0",
+        "timestamp": 1790031494000
+      },
+      {
+        "executionId": "fdaa13be-2a6d-456c-9f2a-7ab3af981775",
+        "chatSessionId": "sess_07bd2924-ac52-4fd1-90cc-6a3ff2d2cde0",
+        "timestamp": 1790158383387
+      }
+    ],
+    "2.5 Create SplitRule model with index": [
+      {
+        "executionId": "6e664c20-3fad-4fec-85af-f27d7f436eb4",
+        "chatSessionId": "sess_07bd2924-ac52-4fd1-90cc-6a3ff2d2cde0",
+        "timestamp": 1790030561383
+      },
+      {
+        "executionId": "6e664c20-3fad-4fec-85af-f27d7f436eb4",
+        "chatSessionId": "sess_07bd2924-ac52-4fd1-90cc-6a3ff2d2cde0",
+        "timestamp": 1790031494628
+      },
+      {
+        "executionId": "fdaa13be-2a6d-456c-9f2a-7ab3af981775",
+        "chatSessionId": "sess_07bd2924-ac52-4fd1-90cc-6a3ff2d2cde0",
+        "timestamp": 1790158383903
+      }
+    ],
+    "2.6 Generate and run migration": [
+      {
+        "executionId": "6e664c20-3fad-4fec-85af-f27d7f436eb4",
+        "chatSessionId": "sess_07bd2924-ac52-4fd1-90cc-6a3ff2d2cde0",
+        "timestamp": 1790030566106
+      },
+      {
+        "executionId": "fdaa13be-2a6d-456c-9f2a-7ab3af981775",
+        "chatSessionId": "sess_07bd2924-ac52-4fd1-90cc-6a3ff2d2cde0",
+        "timestamp": 1790158390800
+      }
+    ],
+    "3. Checkpoint - Ensure schema migration passes": [
+      {
+        "executionId": "6e664c20-3fad-4fec-85af-f27d7f436eb4",
+        "chatSessionId": "sess_07bd2924-ac52-4fd1-90cc-6a3ff2d2cde0",
+        "timestamp": 1790030568352
+      }
+    ],
+    "4.1 Implement VenueScopedGuard with decorator": [
+      {
+        "executionId": "6e664c20-3fad-4fec-85af-f27d7f436eb4",
+        "chatSessionId": "sess_07bd2924-ac52-4fd1-90cc-6a3ff2d2cde0",
+        "timestamp": 1790030572679
+      }
+    ],
+    "4.2 Register VenueScopedGuard in app.module.ts": [
+      {
+        "executionId": "6e664c20-3fad-4fec-85af-f27d7f436eb4",
+        "chatSessionId": "sess_07bd2924-ac52-4fd1-90cc-6a3ff2d2cde0",
+        "timestamp": 1790030574392
+      }
+    ],
+    "4.3 Create SplitRuleSumValidator custom validator": [
+      {
+        "executionId": "6e664c20-3fad-4fec-85af-f27d7f436eb4",
+        "chatSessionId": "sess_07bd2924-ac52-4fd1-90cc-6a3ff2d2cde0",
+        "timestamp": 1790030576358
+      }
+    ],
+    "4.4 Create QR token generation utility": [
+      {
+        "executionId": "6e664c20-3fad-4fec-85af-f27d7f436eb4",
+        "chatSessionId": "sess_07bd2924-ac52-4fd1-90cc-6a3ff2d2cde0",
+        "timestamp": 1790030576785
+      }
+    ],
+    "5.1 Create module structure and DTOs": [
+      {
+        "executionId": "6e664c20-3fad-4fec-85af-f27d7f436eb4",
+        "chatSessionId": "sess_07bd2924-ac52-4fd1-90cc-6a3ff2d2cde0",
+        "timestamp": 1790030577364
+      }
+    ],
+    "5.2 Implement VenuesService with all CRUD methods": [
+      {
+        "executionId": "6e664c20-3fad-4fec-85af-f27d7f436eb4",
+        "chatSessionId": "sess_07bd2924-ac52-4fd1-90cc-6a3ff2d2cde0",
+        "timestamp": 1790030577655
+      }
+    ],
+    "5.3 Implement VenuesController with all endpoints": [
+      {
+        "executionId": "6e664c20-3fad-4fec-85af-f27d7f436eb4",
+        "chatSessionId": "sess_07bd2924-ac52-4fd1-90cc-6a3ff2d2cde0",
+        "timestamp": 1790030577836
+      }
+    ],
+    "5.4 Write VenuesService unit tests": [
+      {
+        "executionId": "6e664c20-3fad-4fec-85af-f27d7f436eb4",
+        "chatSessionId": "sess_07bd2924-ac52-4fd1-90cc-6a3ff2d2cde0",
+        "timestamp": 1790030578359
+      }
+    ],
+    "5.5 Write Venues E2E tests": [
+      {
+        "executionId": "6e664c20-3fad-4fec-85af-f27d7f436eb4",
+        "chatSessionId": "sess_07bd2924-ac52-4fd1-90cc-6a3ff2d2cde0",
+        "timestamp": 1790030578758
+      }
+    ],
+    "6.1 Create module structure and DTOs": [
+      {
+        "executionId": "6e664c20-3fad-4fec-85af-f27d7f436eb4",
+        "chatSessionId": "sess_07bd2924-ac52-4fd1-90cc-6a3ff2d2cde0",
+        "timestamp": 1790030579936
+      }
+    ],
+    "6.2 Implement EntertainersService with CRUD and linking methods": [
+      {
+        "executionId": "6e664c20-3fad-4fec-85af-f27d7f436eb4",
+        "chatSessionId": "sess_07bd2924-ac52-4fd1-90cc-6a3ff2d2cde0",
+        "timestamp": 1790030580208
+      }
+    ],
+    "6.3 Implement EntertainersController with all endpoints": [
+      {
+        "executionId": "6e664c20-3fad-4fec-85af-f27d7f436eb4",
+        "chatSessionId": "sess_07bd2924-ac52-4fd1-90cc-6a3ff2d2cde0",
+        "timestamp": 1790030580727
+      }
+    ],
+    "6.4 Write EntertainersService unit tests": [
+      {
+        "executionId": "6e664c20-3fad-4fec-85af-f27d7f436eb4",
+        "chatSessionId": "sess_07bd2924-ac52-4fd1-90cc-6a3ff2d2cde0",
+        "timestamp": 1790030581643
+      }
+    ],
+    "6.5 Write Entertainers E2E tests": [
+      {
+        "executionId": "6e664c20-3fad-4fec-85af-f27d7f436eb4",
+        "chatSessionId": "sess_07bd2924-ac52-4fd1-90cc-6a3ff2d2cde0",
+        "timestamp": 1790030581840
+      }
+    ],
+    "7. Checkpoint - Ensure venues and entertainers tests pass": [
+      {
+        "executionId": "6e664c20-3fad-4fec-85af-f27d7f436eb4",
+        "chatSessionId": "sess_07bd2924-ac52-4fd1-90cc-6a3ff2d2cde0",
+        "timestamp": 1790030582524
+      }
+    ],
+    "8.1 Create module structure and DTOs": [
+      {
+        "executionId": "6e664c20-3fad-4fec-85af-f27d7f436eb4",
+        "chatSessionId": "sess_07bd2924-ac52-4fd1-90cc-6a3ff2d2cde0",
+        "timestamp": 1790030583709
+      }
+    ],
+    "8.2 Implement QrCodesService with generation and management": [
+      {
+        "executionId": "6e664c20-3fad-4fec-85af-f27d7f436eb4",
+        "chatSessionId": "sess_07bd2924-ac52-4fd1-90cc-6a3ff2d2cde0",
+        "timestamp": 1790030583984
+      }
+    ],
+    "8.3 Implement QrCodesController with all endpoints": [
+      {
+        "executionId": "6e664c20-3fad-4fec-85af-f27d7f436eb4",
+        "chatSessionId": "sess_07bd2924-ac52-4fd1-90cc-6a3ff2d2cde0",
+        "timestamp": 1790030584184
+      }
+    ],
+    "8.4 Write QrCodesService unit tests": [
+      {
+        "executionId": "6e664c20-3fad-4fec-85af-f27d7f436eb4",
+        "chatSessionId": "sess_07bd2924-ac52-4fd1-90cc-6a3ff2d2cde0",
+        "timestamp": 1790030584769
+      }
+    ],
+    "8.5 Write QR Codes E2E tests": [
+      {
+        "executionId": "6e664c20-3fad-4fec-85af-f27d7f436eb4",
+        "chatSessionId": "sess_07bd2924-ac52-4fd1-90cc-6a3ff2d2cde0",
+        "timestamp": 1790030585036
+      }
+    ],
+    "9.1 Create module structure and DTOs": [
+      {
+        "executionId": "6e664c20-3fad-4fec-85af-f27d7f436eb4",
+        "chatSessionId": "sess_07bd2924-ac52-4fd1-90cc-6a3ff2d2cde0",
+        "timestamp": 1790030585310
+      }
+    ],
+    "9.2 Implement GuestService with QR resolution": [
+      {
+        "executionId": "6e664c20-3fad-4fec-85af-f27d7f436eb4",
+        "chatSessionId": "sess_07bd2924-ac52-4fd1-90cc-6a3ff2d2cde0",
+        "timestamp": 1790030585828
+      }
+    ],
+    "9.3 Implement GuestController with public endpoint": [
+      {
+        "executionId": "6e664c20-3fad-4fec-85af-f27d7f436eb4",
+        "chatSessionId": "sess_07bd2924-ac52-4fd1-90cc-6a3ff2d2cde0",
+        "timestamp": 1790030586034
+      }
+    ],
+    "9.4 Write GuestService unit tests": [
+      {
+        "executionId": "6e664c20-3fad-4fec-85af-f27d7f436eb4",
+        "chatSessionId": "sess_07bd2924-ac52-4fd1-90cc-6a3ff2d2cde0",
+        "timestamp": 1790030586298
+      }
+    ],
+    "9.5 Write Guest E2E tests": [
+      {
+        "executionId": "6e664c20-3fad-4fec-85af-f27d7f436eb4",
+        "chatSessionId": "sess_07bd2924-ac52-4fd1-90cc-6a3ff2d2cde0",
+        "timestamp": 1790030586508
+      }
+    ],
+    "10.1 Create module structure and DTOs": [
+      {
+        "executionId": "6e664c20-3fad-4fec-85af-f27d7f436eb4",
+        "chatSessionId": "sess_07bd2924-ac52-4fd1-90cc-6a3ff2d2cde0",
+        "timestamp": 1790030586756
+      }
+    ],
+    "10.2 Implement SplitRulesService with rule management": [
+      {
+        "executionId": "6e664c20-3fad-4fec-85af-f27d7f436eb4",
+        "chatSessionId": "sess_07bd2924-ac52-4fd1-90cc-6a3ff2d2cde0",
+        "timestamp": 1790030587319
+      }
+    ],
+    "10.3 Implement SplitRulesController with all endpoints": [
+      {
+        "executionId": "6e664c20-3fad-4fec-85af-f27d7f436eb4",
+        "chatSessionId": "sess_07bd2924-ac52-4fd1-90cc-6a3ff2d2cde0",
+        "timestamp": 1790030587553
+      }
+    ],
+    "10.4 Write SplitRulesService unit tests": [
+      {
+        "executionId": "6e664c20-3fad-4fec-85af-f27d7f436eb4",
+        "chatSessionId": "sess_07bd2924-ac52-4fd1-90cc-6a3ff2d2cde0",
+        "timestamp": 1790030587794
+      }
+    ],
+    "10.5 Write Split Rules E2E tests": [
+      {
+        "executionId": "6e664c20-3fad-4fec-85af-f27d7f436eb4",
+        "chatSessionId": "sess_07bd2924-ac52-4fd1-90cc-6a3ff2d2cde0",
+        "timestamp": 1790030588047
+      }
+    ],
+    "11. Checkpoint - Ensure all modules and tests pass": [
+      {
+        "executionId": "6e664c20-3fad-4fec-85af-f27d7f436eb4",
+        "chatSessionId": "sess_07bd2924-ac52-4fd1-90cc-6a3ff2d2cde0",
+        "timestamp": 1790030588288
+      }
+    ],
+    "12. Update seed script with Phase 2 test data": [
+      {
+        "executionId": "6e664c20-3fad-4fec-85af-f27d7f436eb4",
+        "chatSessionId": "sess_07bd2924-ac52-4fd1-90cc-6a3ff2d2cde0",
+        "timestamp": 1790030588810
+      }
+    ],
+    "13.1 Write cross-module integration E2E tests": [
+      {
+        "executionId": "6e664c20-3fad-4fec-85af-f27d7f436eb4",
+        "chatSessionId": "sess_07bd2924-ac52-4fd1-90cc-6a3ff2d2cde0",
+        "timestamp": 1790030589051
+      }
+    ],
+    "13.2 Verify test coverage meets 80% threshold": [
+      {
+        "executionId": "6e664c20-3fad-4fec-85af-f27d7f436eb4",
+        "chatSessionId": "sess_07bd2924-ac52-4fd1-90cc-6a3ff2d2cde0",
+        "timestamp": 1790030589282
+      }
+    ],
+    "13.3 Run full CI pipeline locally": [
+      {
+        "executionId": "6e664c20-3fad-4fec-85af-f27d7f436eb4",
+        "chatSessionId": "sess_07bd2924-ac52-4fd1-90cc-6a3ff2d2cde0",
+        "timestamp": 1790030589500
+      }
+    ],
+    "14.1 Verify Swagger documentation completeness": [
+      {
+        "executionId": "6e664c20-3fad-4fec-85af-f27d7f436eb4",
+        "chatSessionId": "sess_07bd2924-ac52-4fd1-90cc-6a3ff2d2cde0",
+        "timestamp": 1790030589890
+      }
+    ],
+    "14.2 Update README with Phase 2 setup instructions": [
+      {
+        "executionId": "6e664c20-3fad-4fec-85af-f27d7f436eb4",
+        "chatSessionId": "sess_07bd2924-ac52-4fd1-90cc-6a3ff2d2cde0",
+        "timestamp": 1790030590147
+      }
+    ],
+    "15. Final checkpoint - Verify Phase 2 complete": [
+      {
+        "executionId": "6e664c20-3fad-4fec-85af-f27d7f436eb4",
+        "chatSessionId": "sess_07bd2924-ac52-4fd1-90cc-6a3ff2d2cde0",
+        "timestamp": 1790030590317
+      }
+    ]
+  }
+}
