@@ -7,7 +7,7 @@
 // the entities on the other end of them exist.
 
 generator client {
-  provider = "prisma-client-js"
+  provider        = "prisma-client-js"
   previewFeatures = ["metrics"]
 }
 
@@ -21,14 +21,121 @@ enum Role {
   VENUE_ADMIN
 }
 
+enum KycStatus {
+  NOT_STARTED
+  PENDING
+  VERIFIED
+  FAILED
+  REVIEW
+  SUSPENDED
+}
+
 model User {
   id           String   @id @default(uuid())
   email        String   @unique
   passwordHash String   @map("password_hash")
   role         Role
   isActive     Boolean  @default(true) @map("is_active")
+  venueId      String?  @map("venue_id")
   createdAt    DateTime @default(now()) @map("created_at")
   updatedAt    DateTime @updatedAt @map("updated_at")
 
+  venue Venue? @relation(fields: [venueId], references: [id])
+
   @@map("users")
+}
+
+model Venue {
+  id        String   @id @default(uuid())
+  name      String
+  slug      String   @unique
+  logoUrl   String?  @map("logo_url")
+  location  String
+  isActive  Boolean  @default(true) @map("is_active")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  users             User[]
+  venueEntertainers VenueEntertainer[]
+  qrCodes           QrCode[]
+  splitRules        SplitRule[]
+
+  @@map("venues")
+}
+
+model Entertainer {
+  id            String    @id @default(uuid())
+  stageName     String    @map("stage_name")
+  legalName     String    @map("legal_name")
+  phone         String    @unique
+  bankName      String?   @map("bank_name")
+  accountNumber String?   @map("account_number")
+  kycStatus     KycStatus @default(NOT_STARTED) @map("kyc_status")
+  isActive      Boolean   @default(true) @map("is_active")
+  createdAt     DateTime  @default(now()) @map("created_at")
+  updatedAt     DateTime  @updatedAt @map("updated_at")
+
+  venueEntertainers VenueEntertainer[]
+  qrCodes           QrCode[]
+
+  @@map("entertainers")
+}
+
+model VenueEntertainer {
+  id            String   @id @default(uuid())
+  venueId       String   @map("venue_id")
+  entertainerId String   @map("entertainer_id")
+  createdAt     DateTime @default(now()) @map("created_at")
+
+  venue       Venue       @relation(fields: [venueId], references: [id], onDelete: Cascade)
+  entertainer Entertainer @relation(fields: [entertainerId], references: [id], onDelete: Cascade)
+
+  @@unique([venueId, entertainerId])
+  @@map("venue_entertainers")
+}
+
+model QrCode {
+  id            String    @id @default(uuid())
+  publicToken   String    @unique @map("public_token")
+  venueId       String    @map("venue_id")
+  entertainerId String?   @map("entertainer_id")
+  location      String
+  isActive      Boolean   @default(true) @map("is_active")
+  deactivatedAt DateTime? @map("deactivated_at")
+  createdAt     DateTime  @default(now()) @map("created_at")
+  updatedAt     DateTime  @updatedAt @map("updated_at")
+
+  venue         Venue          @relation(fields: [venueId], references: [id])
+  entertainer   Entertainer?   @relation(fields: [entertainerId], references: [id])
+  guestSessions GuestSession[]
+
+  @@map("qr_codes")
+}
+
+model GuestSession {
+  id        String   @id @default(uuid())
+  qrCodeId  String   @map("qr_code_id")
+  createdAt DateTime @default(now()) @map("created_at")
+  expiresAt DateTime @map("expires_at")
+
+  qrCode QrCode @relation(fields: [qrCodeId], references: [id])
+
+  @@map("guest_sessions")
+}
+
+model SplitRule {
+  id             String    @id @default(uuid())
+  venueId        String    @map("venue_id")
+  entertainerBps Int       @map("entertainer_bps")
+  venueBps       Int       @map("venue_bps")
+  platformBps    Int       @map("platform_bps")
+  effectiveFrom  DateTime  @default(now()) @map("effective_from")
+  effectiveTo    DateTime? @map("effective_to")
+  createdAt      DateTime  @default(now()) @map("created_at")
+  updatedAt      DateTime  @updatedAt @map("updated_at")
+
+  venue Venue @relation(fields: [venueId], references: [id])
+
+  @@index([venueId, effectiveFrom])
+  @@map("split_rules")
 }
