@@ -19,6 +19,8 @@ import { getThrottlerModuleOptions } from './common/throttler/throttler.config';
 import { VenuesModule } from './venues/venues.module';
 import { EntertainersModule } from './entertainers/entertainers.module';
 import { QrCodesModule } from './qr-codes/qr-codes.module';
+import { GuestModule } from './guest/guest.module';
+import { SplitRulesModule } from './split-rules/split-rules.module';
 
 @Module({
   imports: [
@@ -38,6 +40,8 @@ import { QrCodesModule } from './qr-codes/qr-codes.module';
     VenuesModule,
     EntertainersModule,
     QrCodesModule,
+    GuestModule,
+    SplitRulesModule,
   ],
   providers: [
     // Runs on every request unless explicitly opted out with @Public().

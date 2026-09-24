@@ -34,7 +34,7 @@ describe('Entertainers (e2e)', () => {
     }).compile();
 
     app = moduleFixture.createNestApplication();
-    
+
     app.useGlobalPipes(
       new ValidationPipe({
         whitelist: true,
@@ -191,10 +191,7 @@ describe('Entertainers (e2e)', () => {
         phone: '+2348044444444',
       };
 
-      await request(app.getHttpServer())
-        .post('/entertainers')
-        .send(createDto)
-        .expect(401);
+      await request(app.getHttpServer()).post('/entertainers').send(createDto).expect(401);
     });
 
     it('should return 400 for invalid phone format', async () => {
@@ -211,9 +208,7 @@ describe('Entertainers (e2e)', () => {
         .expect(400);
 
       expect(Array.isArray(response.body.message)).toBe(true);
-      expect(response.body.message.some((msg: string) => 
-        msg.includes('E.164')
-      )).toBe(true);
+      expect(response.body.message.some((msg: string) => msg.includes('E.164'))).toBe(true);
     });
 
     it('should return 400 for invalid accountNumber format', async () => {
@@ -231,9 +226,7 @@ describe('Entertainers (e2e)', () => {
         .expect(400);
 
       expect(Array.isArray(response.body.message)).toBe(true);
-      expect(response.body.message.some((msg: string) => 
-        msg.includes('digits')
-      )).toBe(true);
+      expect(response.body.message.some((msg: string) => msg.includes('digits'))).toBe(true);
     });
 
     it('should return 409 for duplicate phone', async () => {
@@ -262,7 +255,7 @@ describe('Entertainers (e2e)', () => {
 
       expect(Array.isArray(response.body)).toBe(true);
       expect(response.body.length).toBeGreaterThanOrEqual(2);
-      
+
       const entertainerIds = response.body.map((e: any) => e.id);
       expect(entertainerIds).toContain(entertainer1.id);
       expect(entertainerIds).toContain(entertainer2.id);
@@ -281,9 +274,7 @@ describe('Entertainers (e2e)', () => {
     });
 
     it('should return 401 for unauthenticated request', async () => {
-      await request(app.getHttpServer())
-        .get('/entertainers')
-        .expect(401);
+      await request(app.getHttpServer()).get('/entertainers').expect(401);
     });
   });
 

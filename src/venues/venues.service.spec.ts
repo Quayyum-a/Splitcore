@@ -80,13 +80,10 @@ describe('VenuesService', () => {
         location: 'Test Location',
       };
 
-      const duplicateError = new Prisma.PrismaClientKnownRequestError(
-        'Unique constraint failed',
-        {
-          code: 'P2002',
-          clientVersion: '5.0.0',
-        },
-      );
+      const duplicateError = new Prisma.PrismaClientKnownRequestError('Unique constraint failed', {
+        code: 'P2002',
+        clientVersion: '5.0.0',
+      });
 
       mockPrismaService.venue.create.mockRejectedValue(duplicateError);
 
@@ -169,7 +166,7 @@ describe('VenuesService', () => {
     it('should update venue and preserve unmodified fields', async () => {
       const updateDto = { name: 'Updated Name' };
       const updatedVenue = { ...mockVenue, name: 'Updated Name' };
-      
+
       mockPrismaService.venue.update.mockResolvedValue(updatedVenue);
 
       const result = await service.update('venue-id-1', updateDto);
@@ -183,14 +180,11 @@ describe('VenuesService', () => {
 
     it('should throw NotFoundException when updating non-existent venue', async () => {
       const updateDto = { name: 'Updated Name' };
-      
-      const notFoundError = new Prisma.PrismaClientKnownRequestError(
-        'Record not found',
-        {
-          code: 'P2025',
-          clientVersion: '5.0.0',
-        },
-      );
+
+      const notFoundError = new Prisma.PrismaClientKnownRequestError('Record not found', {
+        code: 'P2025',
+        clientVersion: '5.0.0',
+      });
 
       mockPrismaService.venue.update.mockRejectedValue(notFoundError);
 
@@ -217,13 +211,10 @@ describe('VenuesService', () => {
     });
 
     it('should throw NotFoundException when deactivating non-existent venue', async () => {
-      const notFoundError = new Prisma.PrismaClientKnownRequestError(
-        'Record not found',
-        {
-          code: 'P2025',
-          clientVersion: '5.0.0',
-        },
-      );
+      const notFoundError = new Prisma.PrismaClientKnownRequestError('Record not found', {
+        code: 'P2025',
+        clientVersion: '5.0.0',
+      });
 
       mockPrismaService.venue.update.mockRejectedValue(notFoundError);
 

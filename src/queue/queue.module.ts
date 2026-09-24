@@ -6,15 +6,15 @@ export const DIAGNOSTICS_QUEUE = 'diagnostics';
 
 /**
  * QueueModule configures BullMQ connection and registers queues.
- * 
+ *
  * This module is imported by BOTH:
  * - AppModule (API server): Needs queue connection to enqueue jobs
  * - WorkerModule (worker process): Needs queue connection to process jobs
- * 
+ *
  * IMPORTANT: This module does NOT include processors.
  * Processors are registered separately in QueueProcessorsModule,
  * which is ONLY imported by WorkerModule.
- * 
+ *
  * This separation prevents the API server from accidentally starting workers.
  */
 @Module({
@@ -23,7 +23,7 @@ export const DIAGNOSTICS_QUEUE = 'diagnostics';
       inject: [ConfigService],
       useFactory: (config: ConfigService) => {
         const password = config.get<string>('redis.password');
-        
+
         return {
           connection: {
             host: config.get<string>('redis.host'),

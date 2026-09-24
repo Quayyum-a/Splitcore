@@ -26,9 +26,15 @@ export class HealthController {
   @Public()
   @SkipThrottle()
   @HealthCheck()
-  @ApiOperation({ summary: 'Health check', description: 'Check the health status of the API, database, and Redis' })
+  @ApiOperation({
+    summary: 'Health check',
+    description: 'Check the health status of the API, database, and Redis',
+  })
   @ApiResponse({ status: 200, description: 'All systems operational' })
-  @ApiResponse({ status: 503, description: 'Service unavailable - one or more dependencies are down' })
+  @ApiResponse({
+    status: 503,
+    description: 'Service unavailable - one or more dependencies are down',
+  })
   check() {
     return this.health.check([
       (): Promise<HealthIndicatorResult> => this.checkDatabase(),

@@ -13,7 +13,9 @@ export class CreateVenueDto {
     example: 'quilox-nightclub',
   })
   @IsString()
-  @Matches(/^[a-z0-9-]+$/, { message: 'Slug must contain only lowercase letters, numbers, and hyphens' })
+  @Matches(/^[a-z0-9-]+$/, {
+    message: 'Slug must contain only lowercase letters, numbers, and hyphens',
+  })
   @MinLength(1)
   @MaxLength(50)
   slug!: string;

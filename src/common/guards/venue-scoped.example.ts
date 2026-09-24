@@ -1,9 +1,9 @@
 /**
  * Example usage of @VenueScoped() decorator
- * 
+ *
  * This file demonstrates how to use the VenueScopedGuard and @VenueScoped() decorator
  * in controller methods to enforce venue-scoped access control.
- * 
+ *
  * DO NOT import this file in your application - it's for documentation purposes only.
  */
 
@@ -17,11 +17,11 @@ import { Role } from '@prisma/client';
 export class ExampleVenuesController {
   /**
    * GET /venues/:venueId
-   * 
+   *
    * Both PLATFORM_ADMIN and VENUE_ADMIN can call this endpoint.
    * - PLATFORM_ADMIN: Can view any venue
    * - VENUE_ADMIN: Can only view their assigned venue
-   * 
+   *
    * The @VenueScoped() decorator extracts venueId from params.venueId
    * and validates venue access.
    */
@@ -35,20 +35,17 @@ export class ExampleVenuesController {
 
   /**
    * PATCH /venues/:venueId
-   * 
+   *
    * Both PLATFORM_ADMIN and VENUE_ADMIN can call this endpoint.
    * - PLATFORM_ADMIN: Can update any venue
    * - VENUE_ADMIN: Can only update their assigned venue
-   * 
+   *
    * The @VenueScoped() decorator extracts venueId from params.venueId
    */
   @Patch(':venueId')
   @Roles(Role.PLATFORM_ADMIN, Role.VENUE_ADMIN)
   @VenueScoped()
-  async updateVenue(
-    @Param('venueId') venueId: string,
-    @Body() updateDto: any,
-  ) {
+  async updateVenue(@Param('venueId') venueId: string, @Body() updateDto: any) {
     return { venueId, message: 'Venue updated successfully' };
   }
 }
@@ -58,11 +55,11 @@ export class ExampleVenuesController {
 export class ExampleEntertainersController {
   /**
    * POST /entertainers/:entertainerId/venues/:venueId
-   * 
+   *
    * Links an entertainer to a venue.
    * - PLATFORM_ADMIN: Can link to any venue
    * - VENUE_ADMIN: Can only link to their assigned venue
-   * 
+   *
    * The @VenueScoped() decorator extracts venueId from params.venueId
    */
   @Post(':entertainerId/venues/:venueId')
@@ -81,11 +78,11 @@ export class ExampleEntertainersController {
 export class ExampleQrCodesController {
   /**
    * POST /qr-codes
-   * 
+   *
    * Creates a QR code for a venue.
    * - PLATFORM_ADMIN: Can create QR codes for any venue
    * - VENUE_ADMIN: Can only create QR codes for their assigned venue
-   * 
+   *
    * The @VenueScoped() decorator extracts venueId from body.venueId
    */
   @Post()
@@ -101,7 +98,7 @@ export class ExampleQrCodesController {
 export class ExamplePlatformAdminController {
   /**
    * POST /venues
-   * 
+   *
    * Only PLATFORM_ADMIN can create venues.
    * No @VenueScoped() decorator needed because:
    * 1. This creates a new venue (no existing venueId to check)
@@ -116,17 +113,17 @@ export class ExamplePlatformAdminController {
 
 /**
  * Error Scenarios:
- * 
+ *
  * Scenario 1: Venue admin tries to access another venue
  * User: { role: VENUE_ADMIN, venueId: 'venue-1' }
  * Request: GET /venues/venue-2
  * Result: 403 Forbidden - "Access denied to this venue"
- * 
+ *
  * Scenario 2: Venue admin sends request without venueId
  * User: { role: VENUE_ADMIN, venueId: 'venue-1' }
  * Request: POST /some-endpoint (no venueId in params or body)
  * Result: 403 Forbidden - "Venue ID required for venue-scoped operation"
- * 
+ *
  * Scenario 3: Platform admin can access any venue
  * User: { role: PLATFORM_ADMIN, venueId: null }
  * Request: GET /venues/any-venue-id

@@ -109,9 +109,7 @@ describe('Security Middleware (e2e)', () => {
         data: 'x'.repeat(900 * 1024),
       };
 
-      const response = await request(app.getHttpServer())
-        .post('/auth/login')
-        .send(largePayload);
+      const response = await request(app.getHttpServer()).post('/auth/login').send(largePayload);
 
       // Should not be rejected for payload size (may fail validation for other reasons)
       expect(response.status).not.toBe(413);
@@ -123,9 +121,7 @@ describe('Security Middleware (e2e)', () => {
         data: 'x'.repeat(1100 * 1024),
       };
 
-      const response = await request(app.getHttpServer())
-        .post('/auth/login')
-        .send(tooLargePayload);
+      const response = await request(app.getHttpServer()).post('/auth/login').send(tooLargePayload);
 
       // Should be rejected with 413 Payload Too Large
       expect(response.status).toBe(413);

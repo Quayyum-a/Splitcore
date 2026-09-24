@@ -94,13 +94,10 @@ describe('EntertainersService', () => {
         phone: '+2348012345678',
       };
 
-      const duplicateError = new Prisma.PrismaClientKnownRequestError(
-        'Unique constraint failed',
-        {
-          code: 'P2002',
-          clientVersion: '5.0.0',
-        },
-      );
+      const duplicateError = new Prisma.PrismaClientKnownRequestError('Unique constraint failed', {
+        code: 'P2002',
+        clientVersion: '5.0.0',
+      });
 
       mockPrismaService.entertainer.create.mockRejectedValue(duplicateError);
 
@@ -266,13 +263,10 @@ describe('EntertainersService', () => {
     it('should throw ConflictException when updating to duplicate phone', async () => {
       const updateDto = { phone: '+2348012345678' };
 
-      const duplicateError = new Prisma.PrismaClientKnownRequestError(
-        'Unique constraint failed',
-        {
-          code: 'P2002',
-          clientVersion: '5.0.0',
-        },
-      );
+      const duplicateError = new Prisma.PrismaClientKnownRequestError('Unique constraint failed', {
+        code: 'P2002',
+        clientVersion: '5.0.0',
+      });
 
       mockPrismaService.entertainer.update.mockRejectedValue(duplicateError);
 
@@ -360,13 +354,10 @@ describe('EntertainersService', () => {
     });
 
     it('should throw ConflictException when link already exists', async () => {
-      const duplicateError = new Prisma.PrismaClientKnownRequestError(
-        'Unique constraint failed',
-        {
-          code: 'P2002',
-          clientVersion: '5.0.0',
-        },
-      );
+      const duplicateError = new Prisma.PrismaClientKnownRequestError('Unique constraint failed', {
+        code: 'P2002',
+        clientVersion: '5.0.0',
+      });
 
       mockPrismaService.venueEntertainer.create.mockRejectedValue(duplicateError);
 

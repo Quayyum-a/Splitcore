@@ -10,7 +10,7 @@ import { QueueProcessorsModule } from '../queue/queue-processors.module';
 
 /**
  * WorkerModule is the root module for the queue worker process.
- * 
+ *
  * It imports all necessary modules for processing background jobs:
  * - ConfigModule: Environment configuration with validation
  * - LoggerModule: Structured logging via pino
@@ -18,7 +18,7 @@ import { QueueProcessorsModule } from '../queue/queue-processors.module';
  * - RedisModule: Redis connection for BullMQ
  * - QueueModule: Queue configuration (shared with API server)
  * - QueueProcessorsModule: Job processors (WORKER ONLY)
- * 
+ *
  * This module is used by src/worker.ts (worker entry point),
  * NOT src/main.ts (API server entry point).
  */

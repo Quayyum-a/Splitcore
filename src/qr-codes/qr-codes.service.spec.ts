@@ -153,7 +153,9 @@ describe('QrCodesService', () => {
       mockPrismaService.venue.findUnique.mockResolvedValue(null);
 
       await expect(service.create(createDto)).rejects.toThrow(NotFoundException);
-      await expect(service.create(createDto)).rejects.toThrow('Venue with ID non-existent-venue not found');
+      await expect(service.create(createDto)).rejects.toThrow(
+        'Venue with ID non-existent-venue not found',
+      );
     });
 
     it('should throw NotFoundException when entertainer does not exist', async () => {
@@ -167,7 +169,9 @@ describe('QrCodesService', () => {
       mockPrismaService.entertainer.findUnique.mockResolvedValue(null);
 
       await expect(service.create(createDto)).rejects.toThrow(NotFoundException);
-      await expect(service.create(createDto)).rejects.toThrow('Entertainer with ID non-existent-entertainer not found');
+      await expect(service.create(createDto)).rejects.toThrow(
+        'Entertainer with ID non-existent-entertainer not found',
+      );
     });
 
     it('should throw BadRequestException when entertainer not linked to venue', async () => {
@@ -182,7 +186,9 @@ describe('QrCodesService', () => {
       mockPrismaService.venueEntertainer.findFirst.mockResolvedValue(null);
 
       await expect(service.create(createDto)).rejects.toThrow(BadRequestException);
-      await expect(service.create(createDto)).rejects.toThrow('Entertainer is not linked to this venue');
+      await expect(service.create(createDto)).rejects.toThrow(
+        'Entertainer is not linked to this venue',
+      );
     });
   });
 
@@ -255,7 +261,9 @@ describe('QrCodesService', () => {
       mockPrismaService.qrCode.findUnique.mockResolvedValue(null);
 
       await expect(service.findOne('invalid-id')).rejects.toThrow(NotFoundException);
-      await expect(service.findOne('invalid-id')).rejects.toThrow('QR code with ID invalid-id not found');
+      await expect(service.findOne('invalid-id')).rejects.toThrow(
+        'QR code with ID invalid-id not found',
+      );
     });
   });
 
@@ -327,7 +335,9 @@ describe('QrCodesService', () => {
       });
 
       await expect(service.regenerate('invalid-id')).rejects.toThrow(NotFoundException);
-      await expect(service.regenerate('invalid-id')).rejects.toThrow('QR code with ID invalid-id not found');
+      await expect(service.regenerate('invalid-id')).rejects.toThrow(
+        'QR code with ID invalid-id not found',
+      );
     });
   });
 });

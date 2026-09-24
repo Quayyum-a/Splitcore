@@ -20,7 +20,9 @@ import { randomUUID } from 'crypto';
             // Pretty-printed, human-readable logs locally; raw JSON in
             // every other environment, since that's what log aggregators
             // (and grep on a server) actually want.
-            transport: isProd ? undefined : { target: 'pino-pretty', options: { singleLine: true } },
+            transport: isProd
+              ? undefined
+              : { target: 'pino-pretty', options: { singleLine: true } },
             genReqId: (req: any) => req.headers['x-request-id'] ?? randomUUID(),
             redact: {
               paths: [

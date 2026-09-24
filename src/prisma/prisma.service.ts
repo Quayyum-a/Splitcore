@@ -19,7 +19,7 @@ export class PrismaService extends PrismaClient implements OnModuleInit, OnModul
     if (nodeEnv === 'production') {
       const url = new URL(databaseUrl);
       const params = new URLSearchParams(url.search);
-      
+
       // Add production-specific connection pool configuration
       if (!params.has('connection_limit')) {
         params.set('connection_limit', '10');
@@ -30,7 +30,7 @@ export class PrismaService extends PrismaClient implements OnModuleInit, OnModul
       if (!params.has('connect_timeout')) {
         params.set('connect_timeout', '20');
       }
-      
+
       url.search = params.toString();
       connectionUrl = url.toString();
     }
@@ -42,9 +42,7 @@ export class PrismaService extends PrismaClient implements OnModuleInit, OnModul
         },
       },
       // Configure log levels based on environment
-      log: nodeEnv === 'development' 
-        ? ['query', 'info', 'warn', 'error']
-        : ['warn', 'error'],
+      log: nodeEnv === 'development' ? ['query', 'info', 'warn', 'error'] : ['warn', 'error'],
     });
   }
 
@@ -52,7 +50,7 @@ export class PrismaService extends PrismaClient implements OnModuleInit, OnModul
     try {
       await this.$connect();
       this.logger.log('Database connection established');
-      
+
       // Enable slow query detection in production (>1000ms)
       if (this.configService.get('nodeEnv') === 'production') {
         this.$on('query' as never, (e: any) => {

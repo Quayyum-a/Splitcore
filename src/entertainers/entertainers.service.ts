@@ -30,7 +30,10 @@ export class EntertainersService {
     }
   }
 
-  async findAll(userId: string, userRole: Role): Promise<Array<Entertainer & { venueIds: string[] }>> {
+  async findAll(
+    userId: string,
+    userRole: Role,
+  ): Promise<Array<Entertainer & { venueIds: string[] }>> {
     if (userRole === Role.PLATFORM_ADMIN) {
       const entertainers = await this.prisma.entertainer.findMany({
         orderBy: { createdAt: 'desc' },
@@ -102,7 +105,10 @@ export class EntertainersService {
     };
   }
 
-  async update(id: string, dto: UpdateEntertainerDto): Promise<Entertainer & { venueIds: string[] }> {
+  async update(
+    id: string,
+    dto: UpdateEntertainerDto,
+  ): Promise<Entertainer & { venueIds: string[] }> {
     try {
       const entertainer = await this.prisma.entertainer.update({
         where: { id },
@@ -133,20 +139,22 @@ export class EntertainersService {
     // Use transaction to deactivate entertainer AND all related QR codes
     return await this.prisma.$transaction(async (tx) => {
       // Deactivate the entertainer
-      const entertainer = await tx.entertainer.update({
-        where: { id },
-        data: { isActive: false },
-        include: {
-          venueEntertainers: {
-            select: { venueId: true },
+      const entertainer = await tx.entertainer
+        .update({
+          where: { id },
+          data: { isActive: false },
+          include: {
+            venueEntertainers: {
+              select: { venueId: true },
+            },
           },
-        },
-      }).catch((error) => {
-        if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2025') {
-          throw new NotFoundException(`Entertainer with ID ${id} not found`);
-        }
-        throw error;
-      });
+        })
+        .catch((error) => {
+          if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2025') {
+            throw new NotFoundException(`Entertainer with ID ${id} not found`);
+          }
+          throw error;
+        });
 
       // Deactivate all QR codes associated with this entertainer
       await tx.qrCode.updateMany({

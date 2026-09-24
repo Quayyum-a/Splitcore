@@ -1,18 +1,5 @@
-import {
-  Controller,
-  Get,
-  Post,
-  Delete,
-  Body,
-  Param,
-  Request,
-} from '@nestjs/common';
-import {
-  ApiTags,
-  ApiBearerAuth,
-  ApiResponse,
-  ApiOperation,
-} from '@nestjs/swagger';
+import { Controller, Get, Post, Delete, Body, Param, Request } from '@nestjs/common';
+import { ApiTags, ApiBearerAuth, ApiResponse, ApiOperation } from '@nestjs/swagger';
 import { QrCodesService } from './qr-codes.service';
 import { CreateQrCodeDto } from './dto/create-qr-code.dto';
 import { QrCodeResponseDto } from './dto/qr-code-response.dto';

@@ -30,7 +30,7 @@ describe('Venues (e2e)', () => {
     }).compile();
 
     app = moduleFixture.createNestApplication();
-    
+
     // Apply global validation pipe to match main.ts
     app.useGlobalPipes(
       new ValidationPipe({
@@ -167,10 +167,7 @@ describe('Venues (e2e)', () => {
         location: 'Test Location',
       };
 
-      await request(app.getHttpServer())
-        .post('/venues')
-        .send(createDto)
-        .expect(401);
+      await request(app.getHttpServer()).post('/venues').send(createDto).expect(401);
     });
 
     it('should return 403 for VENUE_ADMIN role', async () => {
@@ -202,9 +199,11 @@ describe('Venues (e2e)', () => {
 
       // Validation pipe returns an array of messages
       expect(Array.isArray(response.body.message)).toBe(true);
-      expect(response.body.message.some((msg: string) => 
-        msg.includes('lowercase letters, numbers, and hyphens')
-      )).toBe(true);
+      expect(
+        response.body.message.some((msg: string) =>
+          msg.includes('lowercase letters, numbers, and hyphens'),
+        ),
+      ).toBe(true);
     });
 
     it('should return 409 for duplicate slug', async () => {
@@ -246,7 +245,7 @@ describe('Venues (e2e)', () => {
 
       expect(Array.isArray(response.body)).toBe(true);
       expect(response.body.length).toBeGreaterThanOrEqual(2);
-      
+
       const venueIds = response.body.map((v: any) => v.id);
       expect(venueIds).toContain(venue1.id);
       expect(venueIds).toContain(venue2.id);
@@ -264,9 +263,7 @@ describe('Venues (e2e)', () => {
     });
 
     it('should return 401 for unauthenticated request', async () => {
-      await request(app.getHttpServer())
-        .get('/venues')
-        .expect(401);
+      await request(app.getHttpServer()).get('/venues').expect(401);
     });
   });
 

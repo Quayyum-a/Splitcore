@@ -125,3 +125,114 @@ ledger, payouts, webhooks, reconciliation — all Phase 2 onward, per the PRD.
 Building those now, before this foundation existed, would mean designing
 relationships against tables that don't exist yet.
 # Splitcore
+
+## Phase 2: Core Domain (COMPLETE)
+
+Phase 2 introduces the core domain model for digital tipping in Lagos nightlife venues.
+
+### New Domain Models
+
+- **Venues**: Nightclubs and entertainment establishments
+- **Entertainers**: DJs and performers with KYC status tracking
+- **VenueEntertainer**: Many-to-many relationship (entertainers work at multiple venues)
+- **QR Codes**: Public tokens for guest tip resolution (venue-specific or entertainer-specific)
+- **Guest Sessions**: 24-hour sessions created when guests scan QR codes
+- **Split Rules**: Revenue split configuration per venue (append-only versioning)
+
+### Phase 2 Endpoints
+
+#### Venues
+- `POST /venues` - Create venue (Platform Admin only)
+- `GET /venues` - List venues (filtered by role)
+- `GET /venues/:venueId` - Get venue details
+- `PATCH /venues/:venueId` - Update venue (venue-scoped)
+- `DELETE /venues/:venueId` - Soft delete venue (venue-scoped)
+
+#### Entertainers
+- `POST /entertainers` - Create entertainer
+- `GET /entertainers` - List entertainers (filtered by venue access)
+- `GET /entertainers/:entertainerId` - Get entertainer details
+- `PATCH /entertainers/:entertainerId` - Update entertainer
+- `DELETE /entertainers/:entertainerId` - Soft delete (cascades to QR codes)
+- `POST /entertainers/:entertainerId/venues/:venueId` - Link to venue
+- `DELETE /entertainers/:entertainerId/venues/:venueId` - Unlink from venue
+
+#### QR Codes
+- `POST /qr-codes` - Create QR code (venue-scoped)
+- `GET /qr-codes` - List QR codes (filtered by venue access)
+- `GET /qr-codes/:qrCodeId` - Get QR code details
+- `DELETE /qr-codes/:qrCodeId` - Soft delete QR code
+- `POST /qr-codes/:qrCodeId/regenerate` - Generate new token (deactivates old)
+
+#### Guest (Public)
+- `GET /t/:publicToken` - Resolve QR code and create guest session (**no auth required**)
+  - Returns 200 with session for active QR code
+  - Returns 404 if token never existed
+  - Returns 410 (Gone) if QR code, venue, or entertainer is deactivated
+
+#### Split Rules
+- `POST /split-rules` - Create split rule (closes out current rule, venue-scoped)
+- `GET /split-rules/venue/:venueId` - Get split rule history
+- `GET /split-rules/venue/:venueId/active` - Get currently active rule
+
+### Running Phase 2 Migration
+
+```bash
+# Run the Phase 2 migration
+npx prisma migrate deploy
+
+# Seed database with sample data
+npx prisma db seed
+```
+
+### Sample Data (After Seed)
+
+**Credentials:**
+- Platform Admin: `admin@splitcore.dev` / `ChangeMe123!`
+- Venue Admin 1: `admin@quilox.com` / `Quilox123!`
+- Venue Admin 2: `admin@cubana.com` / `Cubana123!`
+
+**Sample QR Tokens (GET /t/:publicToken):**
+- `quilox-vip-table-1-dj-neptune-0001` (Entertainer-specific)
+- `quilox-general-area-bar-counter-02` (Venue-only)
+
+### Example: Guest Tip Flow
+
+```bash
+# 1. Guest scans QR code (no authentication)
+curl https://splitcore-api.onrender.com/t/quilox-vip-table-1-dj-neptune-0001
+
+# Response includes:
+# - venue details (name, location, logo)
+# - entertainer details (if entertainer-specific QR)
+# - sessionId (valid for 24 hours)
+# - expiresAt timestamp
+
+# 2. Guest proceeds to tip using sessionId (Phase 3+)
+```
+
+### Access Control
+
+- **VenueScopedGuard**: Ensures VENUE_ADMIN can only access their assigned venue
+- **RolesGuard**: Enforces role-based permissions
+- **@Public() decorator**: Marks Guest endpoint as publicly accessible
+
+### Split Rule Versioning
+
+Split rules are append-only with temporal validity:
+- Creating a new rule closes out the current active rule (sets `effectiveTo`)
+- New rule becomes active with `effectiveTo = null`
+- Full history is preserved for audit/analytics
+
+### Test Coverage
+
+- **Unit Tests**: 145 passing
+- **E2E Tests**: 54 passing (Venues, Entertainers, QR Codes, Guest)
+- **Coverage**: 58% overall (domain modules 80%+, Phase 1 infrastructure excluded)
+
+### What's NOT in Phase 2
+
+- Payment processing (Paystack integration) → Phase 3
+- Ledger and transaction tracking → Phase 3
+- Payout calculations and disbursement → Phase 4
+- Entertainer authentication (ENTERTAINER role) → Phase 7

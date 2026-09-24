@@ -134,9 +134,7 @@ describe('SplitRuleSumValidator', () => {
 
       const message = validator.defaultMessage(mockArgs);
 
-      expect(message).toBe(
-        'Split rule basis points must sum to exactly 10000 (received 9500)',
-      );
+      expect(message).toBe('Split rule basis points must sum to exactly 10000 (received 9500)');
     });
 
     it('should return error message with actual sum when sum is greater than 10000', () => {
@@ -154,9 +152,7 @@ describe('SplitRuleSumValidator', () => {
 
       const message = validator.defaultMessage(mockArgs);
 
-      expect(message).toBe(
-        'Split rule basis points must sum to exactly 10000 (received 10500)',
-      );
+      expect(message).toBe('Split rule basis points must sum to exactly 10000 (received 10500)');
     });
 
     it('should handle undefined values in error message', () => {
@@ -174,9 +170,7 @@ describe('SplitRuleSumValidator', () => {
 
       const message = validator.defaultMessage(mockArgs);
 
-      expect(message).toBe(
-        'Split rule basis points must sum to exactly 10000 (received 0)',
-      );
+      expect(message).toBe('Split rule basis points must sum to exactly 10000 (received 0)');
     });
 
     it('should include correct sum in message when validation passes', () => {
@@ -194,9 +188,7 @@ describe('SplitRuleSumValidator', () => {
 
       const message = validator.defaultMessage(mockArgs);
 
-      expect(message).toBe(
-        'Split rule basis points must sum to exactly 10000 (received 10000)',
-      );
+      expect(message).toBe('Split rule basis points must sum to exactly 10000 (received 10000)');
     });
   });
 });

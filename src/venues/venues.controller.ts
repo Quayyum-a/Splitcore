@@ -9,12 +9,7 @@ import {
   UseGuards,
   Request,
 } from '@nestjs/common';
-import {
-  ApiTags,
-  ApiBearerAuth,
-  ApiResponse,
-  ApiOperation,
-} from '@nestjs/swagger';
+import { ApiTags, ApiBearerAuth, ApiResponse, ApiOperation } from '@nestjs/swagger';
 import { VenuesService } from './venues.service';
 import { CreateVenueDto } from './dto/create-venue.dto';
 import { UpdateVenueDto } from './dto/update-venue.dto';
@@ -80,7 +75,11 @@ export class VenuesController {
   @Roles(Role.PLATFORM_ADMIN, Role.VENUE_ADMIN)
   @VenueScoped()
   @ApiOperation({ summary: 'Deactivate venue (soft delete, venue-scoped for Venue Admins)' })
-  @ApiResponse({ status: 200, description: 'Venue deactivated successfully', type: VenueResponseDto })
+  @ApiResponse({
+    status: 200,
+    description: 'Venue deactivated successfully',
+    type: VenueResponseDto,
+  })
   @ApiResponse({ status: 401, description: 'Unauthorized' })
   @ApiResponse({ status: 403, description: 'Forbidden - access denied to this venue' })
   @ApiResponse({ status: 404, description: 'Venue not found' })

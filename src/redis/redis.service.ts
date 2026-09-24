@@ -43,12 +43,14 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
       retryStrategy: (times: number) => {
         if (times > this.maxReconnectAttempts) {
           this.logger.error(
-            `Failed to connect to Redis after ${this.maxReconnectAttempts} attempts. Exiting...`
+            `Failed to connect to Redis after ${this.maxReconnectAttempts} attempts. Exiting...`,
           );
           process.exit(1);
         }
         const delay = this.reconnectInterval;
-        this.logger.warn(`Reconnecting to Redis... (attempt ${times}/${this.maxReconnectAttempts})`);
+        this.logger.warn(
+          `Reconnecting to Redis... (attempt ${times}/${this.maxReconnectAttempts})`,
+        );
         return delay;
       },
     });

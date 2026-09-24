@@ -67,7 +67,7 @@ describe('RedisService', () => {
           maxRetriesPerRequest: 3,
           enableReadyCheck: true,
           connectTimeout: 10000,
-        })
+        }),
       );
 
       expect(mockRedisClient.ping).toHaveBeenCalled();
@@ -91,7 +91,7 @@ describe('RedisService', () => {
 
       // Trigger connect event
       const connectHandler = mockRedisClient.on.mock.calls.find(
-        call => call[0] === 'connect'
+        (call) => call[0] === 'connect',
       )?.[1];
       connectHandler?.();
 
@@ -154,7 +154,7 @@ describe('RedisService', () => {
 
       // Trigger connect event
       const connectHandler = mockRedisClient.on.mock.calls.find(
-        call => call[0] === 'connect'
+        (call) => call[0] === 'connect',
       )?.[1];
       connectHandler?.();
 
@@ -168,16 +168,14 @@ describe('RedisService', () => {
 
       // Trigger connect event first
       const connectHandler = mockRedisClient.on.mock.calls.find(
-        call => call[0] === 'connect'
+        (call) => call[0] === 'connect',
       )?.[1];
       connectHandler?.();
 
       expect(service.isReady()).toBe(true);
 
       // Trigger error event
-      const errorHandler = mockRedisClient.on.mock.calls.find(
-        call => call[0] === 'error'
-      )?.[1];
+      const errorHandler = mockRedisClient.on.mock.calls.find((call) => call[0] === 'error')?.[1];
       errorHandler?.(new Error('Connection lost'));
 
       expect(service.isReady()).toBe(false);
@@ -190,16 +188,14 @@ describe('RedisService', () => {
 
       // Trigger connect event first
       const connectHandler = mockRedisClient.on.mock.calls.find(
-        call => call[0] === 'connect'
+        (call) => call[0] === 'connect',
       )?.[1];
       connectHandler?.();
 
       expect(service.isReady()).toBe(true);
 
       // Trigger close event
-      const closeHandler = mockRedisClient.on.mock.calls.find(
-        call => call[0] === 'close'
-      )?.[1];
+      const closeHandler = mockRedisClient.on.mock.calls.find((call) => call[0] === 'close')?.[1];
       closeHandler?.();
 
       expect(service.isReady()).toBe(false);
@@ -267,7 +263,7 @@ describe('RedisService', () => {
 
       // Trigger successful connect event
       const connectHandler = mockRedisClient.on.mock.calls.find(
-        call => call[0] === 'connect'
+        (call) => call[0] === 'connect',
       )?.[1];
       connectHandler?.();
 
@@ -286,7 +282,7 @@ describe('RedisService', () => {
       expect(Redis).toHaveBeenCalledWith(
         expect.objectContaining({
           connectTimeout: 10000,
-        })
+        }),
       );
     });
 
@@ -298,7 +294,7 @@ describe('RedisService', () => {
       expect(Redis).toHaveBeenCalledWith(
         expect.objectContaining({
           maxRetriesPerRequest: 3,
-        })
+        }),
       );
     });
 
@@ -310,7 +306,7 @@ describe('RedisService', () => {
       expect(Redis).toHaveBeenCalledWith(
         expect.objectContaining({
           enableReadyCheck: true,
-        })
+        }),
       );
     });
   });

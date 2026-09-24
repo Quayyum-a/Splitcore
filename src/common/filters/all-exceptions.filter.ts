@@ -51,10 +51,12 @@ export class AllExceptionsFilter implements ExceptionFilter {
             status_code: statusCode,
           },
         },
-        user: request.user ? {
-          id: (request.user as any).userId,
-          role: (request.user as any).role,
-        } : undefined,
+        user: request.user
+          ? {
+              id: (request.user as any).userId,
+              role: (request.user as any).role,
+            }
+          : undefined,
       });
     }
 

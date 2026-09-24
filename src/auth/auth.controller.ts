@@ -19,9 +19,15 @@ export class AuthController {
   @Public()
   @Throttle({ auth: { limit: 5, ttl: 60000 } })
   @HttpCode(HttpStatus.OK)
-  @ApiOperation({ summary: 'User login', description: 'Authenticate with email and password to receive a JWT token' })
+  @ApiOperation({
+    summary: 'User login',
+    description: 'Authenticate with email and password to receive a JWT token',
+  })
   @ApiBody({ type: LoginDto })
-  @ApiResponse({ status: 200, description: 'Login successful. Returns JWT access token and user details.' })
+  @ApiResponse({
+    status: 200,
+    description: 'Login successful. Returns JWT access token and user details.',
+  })
   @ApiResponse({ status: 401, description: 'Unauthorized. Invalid credentials.' })
   @ApiResponse({ status: 400, description: 'Bad Request. Validation failed.' })
   async login(@Body() dto: LoginDto) {

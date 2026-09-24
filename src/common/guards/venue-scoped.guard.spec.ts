@@ -33,9 +33,7 @@ describe('VenueScopedGuard', () => {
     } as unknown as ExecutionContext;
 
     // Mock the reflector to return whether the route is venue-scoped
-    jest
-      .spyOn(reflector, 'getAllAndOverride')
-      .mockReturnValue(isVenueScoped);
+    jest.spyOn(reflector, 'getAllAndOverride').mockReturnValue(isVenueScoped);
 
     return mockContext;
   };
@@ -116,9 +114,7 @@ describe('VenueScopedGuard', () => {
         );
 
         expect(() => guard.canActivate(context)).toThrow(ForbiddenException);
-        expect(() => guard.canActivate(context)).toThrow(
-          'Access denied to this venue',
-        );
+        expect(() => guard.canActivate(context)).toThrow('Access denied to this venue');
       });
 
       it('should throw ForbiddenException when venueId is missing from request', () => {
@@ -143,9 +139,7 @@ describe('VenueScopedGuard', () => {
         );
 
         expect(() => guard.canActivate(context)).toThrow(ForbiddenException);
-        expect(() => guard.canActivate(context)).toThrow(
-          'Access denied to this venue',
-        );
+        expect(() => guard.canActivate(context)).toThrow('Access denied to this venue');
       });
     });
 
@@ -158,19 +152,17 @@ describe('VenueScopedGuard', () => {
         );
 
         expect(() => guard.canActivate(context)).toThrow(ForbiddenException);
-        expect(() => guard.canActivate(context)).toThrow(
-          'Insufficient permissions',
-        );
+        expect(() => guard.canActivate(context)).toThrow('Insufficient permissions');
       });
     });
   });
 
   describe('reflector integration', () => {
     it('should use reflector to check VENUE_SCOPED_KEY metadata', () => {
-      const context = createMockExecutionContext(
-        false,
-        { role: Role.PLATFORM_ADMIN, venueId: null },
-      );
+      const context = createMockExecutionContext(false, {
+        role: Role.PLATFORM_ADMIN,
+        venueId: null,
+      });
 
       const spy = jest.spyOn(reflector, 'getAllAndOverride');
 

@@ -1,19 +1,5 @@
-import {
-  Controller,
-  Get,
-  Post,
-  Patch,
-  Delete,
-  Body,
-  Param,
-  Request,
-} from '@nestjs/common';
-import {
-  ApiTags,
-  ApiBearerAuth,
-  ApiResponse,
-  ApiOperation,
-} from '@nestjs/swagger';
+import { Controller, Get, Post, Patch, Delete, Body, Param, Request } from '@nestjs/common';
+import { ApiTags, ApiBearerAuth, ApiResponse, ApiOperation } from '@nestjs/swagger';
 import { EntertainersService } from './entertainers.service';
 import { CreateEntertainerDto } from './dto/create-entertainer.dto';
 import { UpdateEntertainerDto } from './dto/update-entertainer.dto';

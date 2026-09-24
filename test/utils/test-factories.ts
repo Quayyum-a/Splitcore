@@ -5,11 +5,7 @@ import * as bcrypt from 'bcryptjs';
 export class UserFactory {
   constructor(private prisma: PrismaClient) {}
 
-  async create(overrides?: {
-    email?: string;
-    password?: string;
-    role?: Role;
-  }) {
+  async create(overrides?: { email?: string; password?: string; role?: Role }) {
     const email = overrides?.email || faker.internet.email();
     const password = overrides?.password || 'Password123!';
     const role = overrides?.role || 'USER';

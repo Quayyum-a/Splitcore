@@ -6,7 +6,11 @@ export class CreateQrCodeDto {
   @IsUUID()
   venueId!: string;
 
-  @ApiProperty({ description: 'Entertainer ID (optional)', required: false, example: 'uuid-string' })
+  @ApiProperty({
+    description: 'Entertainer ID (optional)',
+    required: false,
+    example: 'uuid-string',
+  })
   @IsOptional()
   @IsUUID()
   entertainerId?: string;
