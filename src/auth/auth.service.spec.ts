@@ -7,15 +7,19 @@ import { AuthService, SafeUser } from './auth.service';
 import { AuthController } from './auth.controller';
 
 describe('AuthService.hashPassword', () => {
+  // bcryptjs is pure JS, so a cost-12 hash costs ~1s of CPU on its own and
+  // considerably more when the whole suite runs in parallel under coverage
+  // instrumentation. The 5s default timeout is not enough margin for that.
+  const BCRYPT_TIMEOUT_MS = 30_000;
   it('produces a hash that verifies against the original password', async () => {
     const hash = await AuthService.hashPassword('correct-horse-battery-staple');
     await expect(bcrypt.compare('correct-horse-battery-staple', hash)).resolves.toBe(true);
-  });
+  }, BCRYPT_TIMEOUT_MS);
 
   it('rejects an incorrect password against the hash', async () => {
     const hash = await AuthService.hashPassword('correct-horse-battery-staple');
     await expect(bcrypt.compare('wrong-password', hash)).resolves.toBe(false);
-  });
+  }, BCRYPT_TIMEOUT_MS);
 });
 
 function makeUser(overrides: Partial<User> = {}): User {
@@ -50,7 +54,7 @@ describe('AuthService.validateUser', () => {
 
   beforeAll(async () => {
     passwordHash = await AuthService.hashPassword(PASSWORD);
-  });
+  }, 30_000);
 
   it('returns the user without its password hash on a correct password', async () => {
     const { service, prisma } = buildAuth();
