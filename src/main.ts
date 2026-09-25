@@ -36,6 +36,17 @@ async function bootstrap() {
     }),
   );
 
+  // Raw body for webhook signature verification
+  // MUST be before json() middleware
+  app.use(
+    '/webhooks/*',
+    express.raw({ type: 'application/json', limit: '1mb' }),
+    (req: any, res: any, next: any) => {
+      req.rawBody = req.body;
+      next();
+    },
+  );
+
   // Payload size limits (1MB)
   app.use(express.json({ limit: '1mb' }));
   app.use(express.urlencoded({ extended: true, limit: '1mb' }));

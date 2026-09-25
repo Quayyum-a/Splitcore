@@ -9,5 +9,9 @@
   "testTimeout": 30000,
   "moduleNameMapper": {
     "^src/(.*)$": "<rootDir>/../src/$1"
-  }
+  },
+  "transformIgnorePatterns": [
+    "node_modules/(?!(nanoid)/)"
+  ],
+  "setupFiles": ["<rootDir>/redis/setup-redis-test.ts"]
 }

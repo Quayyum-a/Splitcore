@@ -270,6 +270,32 @@ async function main() {
   }
   console.log(`✓ Split rules: 3 venue rules created`);
 
+  // Phase 3 Note: Payment data cannot be seeded directly
+  // Payments require actual Paystack API calls and webhook processing
+  // To test payment flow:
+  // 1. Start the app: npm run start:dev
+  // 2. Scan QR code (GET /t/:publicToken) to create guest session
+  // 3. Initialize payment (POST /payments/initialize) with session ID
+  // 4. Complete payment on Paystack's hosted checkout page
+  // 5. Webhook will process payment, create ledger entries, trigger payouts
+  //
+  // Sample test flow:
+  //   GET /t/quilox-vip-table-1-dj-neptune-0001
+  //   -> returns sessionId
+  //   POST /payments/initialize
+  //   {
+  //     "sessionId": "<from_above>",
+  //     "amountKobo": 500000,  // ₦5,000
+  //     "guestDisplayName": "Anonymous Fan",
+  //     "displayNameEnabled": true
+  //   }
+  //   -> redirects to Paystack checkout
+  //   -> webhook processes payment
+  //   -> ledger entries created (PROCESSOR_CLEARING debit, entertainer/venue/platform credits)
+  //   -> payout triggered for VERIFIED entertainer (DJ Neptune)
+  console.log('');
+  console.log('💡 Payment Testing: See Phase 3 notes in seed.ts for test flow');
+
   console.log('');
   console.log('🎉 Seed complete!');
   console.log('');
@@ -281,6 +307,13 @@ async function main() {
   console.log('Sample QR tokens to test Guest endpoint (GET /t/:publicToken):');
   console.log(`  ${qr1.publicToken}`);
   console.log(`  ${qr2.publicToken}`);
+  console.log('');
+  console.log('Entertainer KYC Status:');
+  console.log(`  ${dj1.stageName}: VERIFIED (will receive instant payouts)`);
+  console.log(`  ${dj2.stageName}: PENDING (payouts queued until KYC complete)`);
+  console.log(`  ${dj3.stageName}: REVIEW (payouts queued)`);
+  console.log(`  ${dj4.stageName}: NOT_STARTED (payouts queued)`);
+  console.log(`  ${dj5.stageName}: FAILED (payouts queued)`);
 }
 
 main()

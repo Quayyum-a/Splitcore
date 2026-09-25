@@ -14,7 +14,15 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
   constructor(private configService: ConfigService) {}
 
   async onModuleInit() {
-    await this.connect();
+    try {
+      await this.connect();
+    } catch (error) {
+      this.logger.warn(
+        `Redis connection failed during startup: ${(error as Error).message}. Application will continue with Redis unavailable.`,
+      );
+      this.isConnected = false;
+      // Do not re-throw - allow application to continue without Redis
+    }
   }
 
   async onModuleDestroy() {

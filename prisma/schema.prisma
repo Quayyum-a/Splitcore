@@ -30,6 +30,28 @@ enum KycStatus {
   SUSPENDED
 }
 
+enum PaymentStatus {
+  CREATED
+  PENDING
+  SUCCESS
+  FAILED
+  ABANDONED
+  REVERSED
+  REFUNDED
+}
+
+enum LedgerAccountType {
+  ENTERTAINER_PAYABLE
+  VENUE_PAYABLE
+  PLATFORM_REVENUE
+  PROCESSOR_CLEARING
+}
+
+enum LedgerDirection {
+  DEBIT
+  CREDIT
+}
+
 model User {
   id           String   @id @default(uuid())
   email        String   @unique
@@ -55,10 +77,11 @@ model Venue {
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
-  users             User[]
-  venueEntertainers VenueEntertainer[]
-  qrCodes           QrCode[]
-  splitRules        SplitRule[]
+  users               User[]
+  venueEntertainers   VenueEntertainer[]
+  qrCodes             QrCode[]
+  splitRules          SplitRule[]
+  paymentTransactions PaymentTransaction[]
 
   @@map("venues")
 }
@@ -75,8 +98,9 @@ model Entertainer {
   createdAt     DateTime  @default(now()) @map("created_at")
   updatedAt     DateTime  @updatedAt @map("updated_at")
 
-  venueEntertainers VenueEntertainer[]
-  qrCodes           QrCode[]
+  venueEntertainers   VenueEntertainer[]
+  qrCodes             QrCode[]
+  paymentTransactions PaymentTransaction[]
 
   @@map("entertainers")
 }
@@ -118,7 +142,8 @@ model GuestSession {
   createdAt DateTime @default(now()) @map("created_at")
   expiresAt DateTime @map("expires_at")
 
-  qrCode QrCode @relation(fields: [qrCodeId], references: [id])
+  qrCode              QrCode               @relation(fields: [qrCodeId], references: [id])
+  paymentTransactions PaymentTransaction[]
 
   @@map("guest_sessions")
 }
@@ -138,4 +163,115 @@ model SplitRule {
 
   @@index([venueId, effectiveFrom])
   @@map("split_rules")
+}
+
+model PaymentTransaction {
+  id                 String        @id @default(uuid())
+  externalReference  String        @unique @map("external_reference")
+  provider           String        // "paystack" - string not enum for flexibility
+  venueId            String        @map("venue_id")
+  entertainerId      String?       @map("entertainer_id")
+  guestSessionId     String        @map("guest_session_id")
+  grossAmountKobo    Int           @map("gross_amount_kobo")
+  guestDisplayName   String?       @map("guest_display_name")
+  displayNameEnabled Boolean       @default(false) @map("display_name_enabled")
+  status             PaymentStatus @default(CREATED)
+  createdAt          DateTime      @default(now()) @map("created_at")
+  updatedAt          DateTime      @updatedAt @map("updated_at")
+
+  venue         Venue          @relation(fields: [venueId], references: [id])
+  entertainer   Entertainer?   @relation(fields: [entertainerId], references: [id])
+  guestSession  GuestSession   @relation(fields: [guestSessionId], references: [id])
+  ledgerEntries LedgerEntry[]
+  payouts       Payout[]
+
+  @@index([externalReference])
+  @@index([venueId])
+  @@index([entertainerId])
+  @@index([guestSessionId])
+  @@index([status])
+  @@map("payment_transactions")
+}
+
+model LedgerAccount {
+  id        String            @id @default(uuid())
+  type      LedgerAccountType
+  ownerId   String?           @map("owner_id") // entertainerId or venueId; null for PLATFORM_REVENUE / PROCESSOR_CLEARING
+  createdAt DateTime          @default(now()) @map("created_at")
+
+  entries LedgerEntry[]
+  payouts Payout[]
+
+  @@unique([type, ownerId])
+  @@index([type])
+  @@index([ownerId])
+  @@map("ledger_accounts")
+}
+
+model LedgerEntry {
+  id            String          @id @default(uuid())
+  transactionId String          @map("transaction_id") // FK to PaymentTransaction.id
+  accountId     String          @map("account_id")
+  direction     LedgerDirection
+  amountKobo    Int             @map("amount_kobo")
+  createdAt     DateTime        @default(now()) @map("created_at")
+
+  account     LedgerAccount      @relation(fields: [accountId], references: [id])
+  transaction PaymentTransaction @relation(fields: [transactionId], references: [id])
+
+  @@index([transactionId])
+  @@index([accountId])
+  @@index([createdAt])
+  @@map("ledger_entries")
+}
+
+model WebhookEvent {
+  id               String    @id @default(uuid())
+  provider         String    // "paystack"
+  eventType        String    @map("event_type") // "charge.success", "transfer.success", etc.
+  externalEventId  String    @unique @map("external_event_id") // Paystack's event ID
+  signature        String
+  payload          Json
+  receivedAt       DateTime  @default(now()) @map("received_at")
+  processedAt      DateTime? @map("processed_at")
+  processingStatus String    @default("PENDING") @map("processing_status") // PENDING, PROCESSING, COMPLETED, FAILED
+
+  @@index([externalEventId])
+  @@index([eventType])
+  @@index([processingStatus])
+  @@index([receivedAt])
+  @@map("webhook_events")
+}
+
+enum PayoutStatus {
+  QUEUED
+  PROCESSING
+  SUCCESS
+  FAILED
+  RETRYING
+  CANCELLED
+}
+
+model Payout {
+  id                String       @id @default(uuid())
+  ledgerAccountId   String       @map("ledger_account_id")
+  transactionId     String       @map("transaction_id")
+  transferReference String?      @unique @map("transfer_reference")
+  recipientCode     String?      @map("recipient_code") // Paystack recipient code
+  amountKobo        Int          @map("amount_kobo")
+  status            PayoutStatus @default(QUEUED)
+  attemptedAt       DateTime?    @map("attempted_at")
+  completedAt       DateTime?    @map("completed_at")
+  failureReason     String?      @map("failure_reason")
+  createdAt         DateTime     @default(now()) @map("created_at")
+  updatedAt         DateTime     @updatedAt @map("updated_at")
+
+  ledgerAccount   LedgerAccount      @relation(fields: [ledgerAccountId], references: [id])
+  paymentTransaction PaymentTransaction @relation(fields: [transactionId], references: [id])
+
+  @@index([ledgerAccountId])
+  @@index([transactionId])
+  @@index([transferReference])
+  @@index([status])
+  @@map("payouts")
 }

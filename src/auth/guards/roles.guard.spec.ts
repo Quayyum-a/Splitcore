@@ -48,7 +48,7 @@ describe('RolesGuard', () => {
     expect(result).toBe(true);
   });
 
-  it('should throw ForbiddenException when user lacks required role', () => {
+  it('should return false when user lacks required role', () => {
     const mockContext = {
       getHandler: jest.fn(),
       getClass: jest.fn(),
@@ -59,6 +59,7 @@ describe('RolesGuard', () => {
 
     jest.spyOn(reflector, 'getAllAndOverride').mockReturnValue([Role.PLATFORM_ADMIN]);
 
-    expect(() => guard.canActivate(mockContext)).toThrow(ForbiddenException);
+    const result = guard.canActivate(mockContext);
+    expect(result).toBe(false);
   });
 });

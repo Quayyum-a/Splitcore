@@ -236,3 +236,251 @@ Split rules are append-only with temporal validity:
 - Ledger and transaction tracking → Phase 3
 - Payout calculations and disbursement → Phase 4
 - Entertainer authentication (ENTERTAINER role) → Phase 7
+
+## Phase 3: Paystack Integration & Payments (COMPLETE)
+
+Phase 3 introduces real money movement: payment processing, double-entry ledger, webhooks, and instant payouts.
+
+### Architecture Overview
+
+```
+Guest Tip Flow:
+1. Scan QR → Create session
+2. Choose amount → Initialize payment (creates CREATED transaction)
+3. Redirect to Paystack hosted checkout (never custom card form)
+4. Complete payment → Paystack sends webhook
+5. Verify signature → Store event → Queue async processing
+6. Verify with Paystack API → Create ledger entries (double-entry)
+7. Trigger payouts → Instant transfer to VERIFIED entertainers
+8. Webhook confirms transfer → Update payout status
+```
+
+### New Domain Models
+
+#### Payments
+- **PaymentTransaction**: Guest payment records (CREATED → PENDING → SUCCESS)
+- **Provider Abstraction**: PaymentProvider & PayoutProvider interfaces (Paystack first, Flutterwave later)
+
+#### Ledger (Double-Entry Bookkeeping)
+- **LedgerAccount**: Account types (ENTERTAINER_PAYABLE, VENUE_PAYABLE, PLATFORM_REVENUE, PROCESSOR_CLEARING)
+- **LedgerEntry**: Immutable DEBIT/CREDIT entries (balanced at write time)
+- **Reconciliation**: Hourly balance checks against Paystack API
+
+#### Payouts
+- **Payout**: Transfer records (QUEUED → PROCESSING → SUCCESS/FAILED)
+- **KYC Gating**: Only VERIFIED entertainers get instant payouts
+- **Idempotency**: Duplicate prevention at webhook and payout level
+
+#### Webhooks
+- **WebhookEvent**: Raw event storage with signature verification
+- **Async Processing**: BullMQ queue for webhook handling
+
+### Phase 3 Endpoints
+
+#### Payments (Public - No Auth)
+- `POST /payments/initialize` - Initialize payment, returns Paystack checkout URL
+  ```json
+  {
+    "sessionId": "guest-session-uuid",
+    "amountKobo": 500000,
+    "guestDisplayName": "Anonymous Fan",
+    "displayNameEnabled": true,
+    "email": "guest@example.com"
+  }
+  ```
+- `GET /payments/:reference/status` - Check payment status (fallback verification)
+
+#### Webhooks (Public - Signature Verified)
+- `POST /webhooks/paystack` - Receive Paystack webhooks
+  - Verifies HMAC SHA512 signature
+  - Stores raw event
+  - Checks idempotency (duplicate = no-op)
+  - Responds 200 within 2s
+  - Queues for async processing
+
+### Critical Design Decisions
+
+#### 1. **Provider Abstraction**
+- Domain logic never depends on Paystack directly
+- `PaymentProvider` & `PayoutProvider` interfaces
+- Enables adding Flutterwave without touching ledger/split logic
+
+#### 2. **Never Trust Client Redirect**
+- Payment status != client returning from checkout
+- Status changes only via:
+  - Verified webhook (primary)
+  - Explicit API verification (fallback)
+
+#### 3. **Double-Entry Ledger**
+- Every transaction produces balanced entries (sum debits = sum credits)
+- Enforced at write time in DB transaction
+- Entries are immutable (corrections = compensating entries)
+- All amounts in integer kobo (NO FLOATS)
+- Platform absorbs rounding differences
+
+Example: ₦5,000 tip at 85/10/5 split:
+```
+DEBIT  PROCESSOR_CLEARING    ₦5,000  (money enters)
+CREDIT ENTERTAINER_PAYABLE   ₦4,250  (85%)
+CREDIT VENUE_PAYABLE         ₦500    (10%)
+CREDIT PLATFORM_REVENUE      ₦250    (5%)
+```
+
+#### 4. **Instant Payouts < ₦10k**
+- Per-tip payouts keep transfers under ₦10,000
+- Avoids ₦50 stamp duty (applies to transfers ≥₦10k)
+- Design choice: instant guest experience + cost optimization
+
+#### 5. **KYC Gating**
+- Only VERIFIED entertainers get instant payouts
+- Others: ledger entries created (money accounted), payout QUEUED
+- Failed payout preserves liability (never deletes ledger entry)
+
+#### 6. **Reconciliation**
+- Hourly cron compares ledger vs Paystack balance
+- Drift detection = first sign of issues
+- Logs ERROR with amount, percentage, audit trail
+
+### Environment Configuration
+
+```bash
+# .env additions for Phase 3
+PAYSTACK_SECRET_KEY=sk_test_your_secret_key
+PAYSTACK_PUBLIC_KEY=pk_test_your_public_key
+APP_URL=http://localhost:3000
+
+# Production: Use live keys
+PAYSTACK_SECRET_KEY=sk_live_your_live_key
+PAYSTACK_PUBLIC_KEY=pk_live_your_live_key
+APP_URL=https://api.splitcore.app
+```
+
+### Paystack Webhook Setup
+
+1. Go to https://dashboard.paystack.com/#/settings/developer
+2. Add webhook URL: `https://api.splitcore.app/webhooks/paystack`
+3. Events to listen for:
+   - `charge.success` (payment confirmed)
+   - `transfer.success` (payout completed)
+   - `transfer.failed` (payout failed)
+   - `transfer.reversed` (payout reversed)
+
+### Testing Payment Flow
+
+See [PHASE_3_TESTING.md](./PHASE_3_TESTING.md) for comprehensive testing guide including:
+- Local testing with Paystack test mode
+- Using ngrok for webhook testing
+- Test card: `4084084084084081`
+- Curl examples for full flow
+- Database verification queries
+- Expected balances and troubleshooting
+
+Quick test:
+```bash
+# 1. Get session
+curl http://localhost:3000/t/quilox-vip-table-1-dj-neptune-0001
+
+# 2. Initialize payment
+curl -X POST http://localhost:3000/payments/initialize \
+  -H "Content-Type: application/json" \
+  -d '{"sessionId":"<session-id>","amountKobo":500000}'
+
+# 3. Complete on Paystack checkout (redirected URL)
+
+# 4. Check status
+curl http://localhost:3000/payments/<reference>/status
+```
+
+### Database Schema Changes
+
+4 new migrations added:
+1. `add_payment_transactions` - PaymentTransaction model
+2. `add_ledger_system` - LedgerAccount + LedgerEntry (double-entry)
+3. `add_webhook_events` - WebhookEvent storage
+4. `add_payouts` - Payout tracking
+
+Run migrations:
+```bash
+npx prisma migrate deploy
+```
+
+### Seed Data Updates
+
+After running seed:
+- DJ Neptune: KYC VERIFIED → Gets instant payouts
+- DJ Spinall: KYC PENDING → Payouts queued
+- Wizkid: KYC REVIEW → Payouts queued
+- Burna Boy: KYC NOT_STARTED → Payouts queued
+- Davido: KYC FAILED → Payouts queued
+
+### Test Coverage
+
+- **Unit Tests**: 164 passing (21 provider tests, 9 ledger tests added)
+- **Build**: ✅ Succeeds
+- **Lint**: ✅ 0 errors
+
+### What Happens After Payment
+
+When `charge.success` webhook arrives:
+
+1. **Verification** (< 2s for 200 response)
+   - Verify HMAC SHA512 signature → reject if invalid
+   - Store raw webhook event
+   - Check duplicate (idempotency via externalEventId)
+   - Queue for async processing
+
+2. **Async Processing** (BullMQ worker)
+   - Verify payment with Paystack API
+   - Verify amount matches our record
+   - Get active split rule for venue
+
+3. **Ledger Entries** (in transaction)
+   - Compute balanced entries (LedgerService)
+   - Write to ledger_entries table
+   - Update payment status to SUCCESS
+   - Verify balance (enforced at DB level)
+
+4. **Payouts** (immediate for VERIFIED)
+   - For each CREDIT entry (entertainer/venue)
+   - Check KYC status (gate for entertainers)
+   - Create Paystack recipient (or reuse)
+   - Initiate transfer with unique reference
+   - Track status: PROCESSING → SUCCESS/FAILED
+
+5. **Transfer Webhooks**
+   - `transfer.success` → Update payout to SUCCESS
+   - `transfer.failed` → Update to FAILED, preserve liability
+
+### Reconciliation
+
+Automatic hourly check:
+```typescript
+@Cron(CronExpression.EVERY_HOUR)
+async runHourlyReconciliation() {
+  // Compare ledger vs Paystack balance
+  // Log ERROR if drift detected
+  // Stores audit trail
+}
+```
+
+Access via logs or expose admin endpoint (TODO: Phase 7).
+
+### Security & Reliability
+
+✅ **Signature Verification**: Every webhook verified with HMAC SHA512  
+✅ **Idempotency**: Duplicate webhooks are no-ops (event + transaction level)  
+✅ **Balance Enforcement**: Ledger entries rejected if unbalanced  
+✅ **Immutable Entries**: Corrections via compensating entries only  
+✅ **KYC Gating**: Protects against payouts to unverified accounts  
+✅ **Failed Payout Preservation**: Liability never lost on transfer failure  
+✅ **Integer Arithmetic**: All amounts in kobo, no float precision loss  
+✅ **Reconciliation**: Hourly drift detection  
+
+### What's NOT in Phase 3
+
+- Admin dashboard for manual reconciliation → Phase 7
+- KYC verification flow (BVN/NIN) → Phase 6 (other half)
+- Entertainer authentication → Phase 7
+- Batch venue payouts (currently queued) → Future optimization
+- Analytics and reporting → Phase 5
+
