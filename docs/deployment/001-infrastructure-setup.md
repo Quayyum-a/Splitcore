@@ -67,7 +67,7 @@ postgresql://postgres:[PASSWORD]@db.[PROJECT_REF].supabase.co:5432/postgres?sslm
 
 **Example:**
 ```
-postgresql://postgres:MySecurePassword123@db.fhpvtkpfogrhzfrpzlbv.supabase.co:5432/postgres?sslmode=require&pgbouncer=true&connection_limit=10&pool_timeout=20&connect_timeout=20
+postgresql://postgres:__DB_PASSWORD__@db.__PROJECT_REF__.supabase.co:5432/postgres?sslmode=require&pgbouncer=true&connection_limit=10&pool_timeout=20&connect_timeout=20
 ```
 
 #### Step 4: Enable Required Extensions (Optional)
@@ -322,7 +322,7 @@ Sentry provides error tracking, performance monitoring, and alerting for product
    ```
    Example:
    ```
-   https://23e3eec2c9ecd80a88baac4f263e9457@o4512081057349632.ingest.us.sentry.io/4512081094770688
+   https://__PUBLIC_KEY__@__ORG_ID__.ingest.us.sentry.io/__PROJECT_ID__
    ```
 4. Copy this DSN - you'll need it for the `SENTRY_DSN` environment variable
 5. If you navigate away, you can always find the DSN at:
@@ -355,7 +355,7 @@ Sentry provides error tracking, performance monitoring, and alerting for product
 Set up your Sentry environment variables:
 
 ```bash
-SENTRY_DSN=https://23e3eec2c9ecd80a88baac4f263e9457@o4512081057349632.ingest.us.sentry.io/4512081094770688
+SENTRY_DSN=https://__PUBLIC_KEY__@__ORG_ID__.ingest.us.sentry.io/__PROJECT_ID__
 SENTRY_TRACES_SAMPLE_RATE=0.1
 ```
 

@@ -866,7 +866,7 @@ PORT=3000
 
 # Database (Supabase PostgreSQL)
 # Format: postgresql://postgres:[PASSWORD]@db.[PROJECT_REF].supabase.co:5432/postgres
-DATABASE_URL="postgresql://postgres:Mavixess@2001@db.fhpvtkpfogrhzfrpzlbv.supabase.co:5432/postgres?sslmode=require&pgbouncer=true&connection_limit=10"
+DATABASE_URL="postgresql://postgres:__DB_PASSWORD__@db.__PROJECT_REF__.supabase.co:5432/postgres?sslmode=require&pgbouncer=true&connection_limit=10"
 
 # Redis (Upstash)
 REDIS_HOST=your-upstash-host.upstash.io
@@ -878,7 +878,7 @@ JWT_SECRET=your-secure-random-32-character-minimum-secret-here
 JWT_EXPIRES_IN=7d
 
 # Monitoring (Sentry)
-SENTRY_DSN=https://23e3eec2c9ecd80a88baac4f263e9457@o4512081057349632.ingest.us.sentry.io/4512081094770688
+SENTRY_DSN=https://__PUBLIC_KEY__@__ORG_ID__.ingest.us.sentry.io/__PROJECT_ID__
 SENTRY_TRACES_SAMPLE_RATE=0.1
 
 # Logging
@@ -1381,7 +1381,7 @@ services:
         value: 7d
       
       - key: SENTRY_DSN
-        value: https://23e3eec2c9ecd80a88baac4f263e9457@o4512081057349632.ingest.us.sentry.io/4512081094770688
+        value: https://__PUBLIC_KEY__@__ORG_ID__.ingest.us.sentry.io/__PROJECT_ID__
       
       - key: SENTRY_TRACES_SAMPLE_RATE
         value: 0.1
@@ -1427,7 +1427,7 @@ services:
         value: 7d
       
       - key: SENTRY_DSN
-        value: https://23e3eec2c9ecd80a88baac4f263e9457@o4512081057349632.ingest.us.sentry.io/4512081094770688
+        value: https://__PUBLIC_KEY__@__ORG_ID__.ingest.us.sentry.io/__PROJECT_ID__
       
       - key: SENTRY_TRACES_SAMPLE_RATE
         value: 0.1
@@ -2123,7 +2123,7 @@ redis-cli -h your-host.upstash.io -p 6379 -a your-password ping
 
 DSN is already configured:
 \`\`\`
-https://23e3eec2c9ecd80a88baac4f263e9457@o4512081057349632.ingest.us.sentry.io/4512081094770688
+https://__PUBLIC_KEY__@__ORG_ID__.ingest.us.sentry.io/__PROJECT_ID__
 \`\`\`
 
 ## Step 4: Render Deployment
@@ -2144,7 +2144,7 @@ For each service, set these environment variables:
 
 #### Required Variables (set in Render dashboard)
 \`\`\`bash
-DATABASE_URL=postgresql://postgres:Mavixess@2001@db.fhpvtkpfogrhzfrpzlbv.supabase.co:5432/postgres?sslmode=require&pgbouncer=true&connection_limit=10
+DATABASE_URL=postgresql://postgres:__DB_PASSWORD__@db.__PROJECT_REF__.supabase.co:5432/postgres?sslmode=require&pgbouncer=true&connection_limit=10
 
 REDIS_HOST=your-upstash-host.upstash.io
 REDIS_PASSWORD=your-upstash-password

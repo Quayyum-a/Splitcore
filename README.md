@@ -549,8 +549,8 @@ all of these work and are normalized to the host ioredis needs:
 
 ```
 localhost
-famous-griffon-165164.upstash.io
-rediss://default:password@famous-griffon-165164.upstash.io:6379
+your-instance.upstash.io
+rediss://default:password@your-instance.upstash.io:6379
 ```
 
 A `rediss://` or `https://` scheme implies TLS. Otherwise TLS is assumed when

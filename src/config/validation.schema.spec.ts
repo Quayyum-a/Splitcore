@@ -62,7 +62,7 @@ describe('validationSchema', () => {
   });
 
   describe('REDIS_HOST', () => {
-    it.each(['localhost', '10.0.0.5', 'famous-griffon-165164.upstash.io'])(
+    it.each(['localhost', '10.0.0.5', 'your-instance.upstash.io'])(
       'accepts the bare host %s',
       (host) => {
         expect(validate({ REDIS_HOST: host }).error).toBeUndefined();
@@ -70,9 +70,9 @@ describe('validationSchema', () => {
     );
 
     it.each([
-      'rediss://default:secret@famous-griffon-165164.upstash.io:6379',
+      'rediss://default:secret@your-instance.upstash.io:6379',
       'redis://localhost:6379',
-      'https://famous-griffon-165164.upstash.io',
+      'https://your-instance.upstash.io',
     ])('accepts the connection URL %s that managed providers hand out', (host) => {
       expect(validate({ REDIS_HOST: host }).error).toBeUndefined();
     });
@@ -130,7 +130,7 @@ describe('validationSchema', () => {
 describe('parseRedisHost', () => {
   it.each([
     ['localhost', 'localhost', false],
-    ['famous-griffon-165164.upstash.io', 'famous-griffon-165164.upstash.io', false],
+    ['your-instance.upstash.io', 'your-instance.upstash.io', false],
     ['redis://localhost:6379', 'localhost', false],
     ['rediss://host.upstash.io:6379', 'host.upstash.io', true],
     ['https://host.upstash.io', 'host.upstash.io', true],
