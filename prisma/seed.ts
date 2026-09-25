@@ -5,13 +5,40 @@ const prisma = new PrismaClient();
 
 // Run with: npx prisma db seed
 // Idempotent: safe to re-run, uses upsert to avoid duplicates
+
+const DEV_DEFAULTS = {
+  admin: 'ChangeMe123!',
+  venue1: 'Quilox123!',
+  venue2: 'Cubana123!',
+};
+
+// The fallbacks below are committed to a public repository, so anyone can read
+// them. Outside development they would be live credentials on an
+// internet-facing API, so require them to be supplied explicitly instead.
+function seedPassword(envVar: string, devDefault: string): string {
+  const supplied = process.env[envVar];
+  if (supplied) return supplied;
+
+  const env = process.env.NODE_ENV ?? 'development';
+  if (env === 'production' || env === 'staging') {
+    throw new Error(
+      `${envVar} must be set when seeding with NODE_ENV=${env}. The development ` +
+        'default is published in this repository and would be a known password on ' +
+        'a live deployment.',
+    );
+  }
+  return devDefault;
+}
+
 async function main() {
   console.log('🌱 Starting seed...');
 
   // 1. Platform Admin
   const email = process.env.SEED_ADMIN_EMAIL ?? 'admin@splitcore.dev';
-  const password = process.env.SEED_ADMIN_PASSWORD ?? 'ChangeMe123!';
+  const password = seedPassword('SEED_ADMIN_PASSWORD', DEV_DEFAULTS.admin);
   const passwordHash = await bcrypt.hash(password, 12);
+  const venue1Password = seedPassword('SEED_VENUE1_PASSWORD', DEV_DEFAULTS.venue1);
+  const venue2Password = seedPassword('SEED_VENUE2_PASSWORD', DEV_DEFAULTS.venue2);
 
   const admin = await prisma.user.upsert({
     where: { email },
@@ -64,7 +91,7 @@ async function main() {
     update: {},
     create: {
       email: 'admin@quilox.com',
-      passwordHash: await bcrypt.hash('Quilox123!', 12),
+      passwordHash: await bcrypt.hash(venue1Password, 12),
       role: Role.VENUE_ADMIN,
       venueId: venue1.id,
     },
@@ -75,7 +102,7 @@ async function main() {
     update: {},
     create: {
       email: 'admin@cubana.com',
-      passwordHash: await bcrypt.hash('Cubana123!', 12),
+      passwordHash: await bcrypt.hash(venue2Password, 12),
       role: Role.VENUE_ADMIN,
       venueId: venue2.id,
     },
@@ -143,7 +170,9 @@ async function main() {
       kycStatus: KycStatus.FAILED,
     },
   });
-  console.log(`✓ Entertainers: ${dj1.stageName}, ${dj2.stageName}, ${dj3.stageName}, ${dj4.stageName}, ${dj5.stageName}`);
+  console.log(
+    `✓ Entertainers: ${dj1.stageName}, ${dj2.stageName}, ${dj3.stageName}, ${dj4.stageName}, ${dj5.stageName}`,
+  );
 
   // 5. Link entertainers to venues (many-to-many)
   const links = [
@@ -300,9 +329,17 @@ async function main() {
   console.log('🎉 Seed complete!');
   console.log('');
   console.log('Credentials:');
-  console.log(`  Platform Admin: ${admin.email} / ${!process.env.SEED_ADMIN_PASSWORD ? 'ChangeMe123!' : '[env: SEED_ADMIN_PASSWORD]'}`);
-  console.log(`  Venue Admin 1: admin@quilox.com / Quilox123!`);
-  console.log(`  Venue Admin 2: admin@cubana.com / Cubana123!`);
+  const shown = (envVar: string, devDefault: string) =>
+    process.env[envVar] ? `[env: ${envVar}]` : devDefault;
+  console.log(
+    `  Platform Admin: ${admin.email} / ${shown('SEED_ADMIN_PASSWORD', DEV_DEFAULTS.admin)}`,
+  );
+  console.log(
+    `  Venue Admin 1: admin@quilox.com / ${shown('SEED_VENUE1_PASSWORD', DEV_DEFAULTS.venue1)}`,
+  );
+  console.log(
+    `  Venue Admin 2: admin@cubana.com / ${shown('SEED_VENUE2_PASSWORD', DEV_DEFAULTS.venue2)}`,
+  );
   console.log('');
   console.log('Sample QR tokens to test Guest endpoint (GET /t/:publicToken):');
   console.log(`  ${qr1.publicToken}`);
