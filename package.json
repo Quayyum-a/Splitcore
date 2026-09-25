@@ -1,7 +1,7 @@
 {
   "name": "splitcore-backend",
   "version": "0.1.0",
-  "description": "Splitcore backend foundation — NestJS, PostgreSQL/Prisma, Redis/BullMQ, auth, logging, error handling",
+  "description": "Splitcore backend foundation \u2014 NestJS, PostgreSQL/Prisma, Redis/BullMQ, auth, logging, error handling",
   "private": true,
   "license": "UNLICENSED",
   "scripts": {
@@ -15,6 +15,7 @@
     "start:worker:dev": "nodemon --watch src --exec ts-node -r tsconfig-paths/register src/worker.ts",
     "start:worker:prod": "node dist/worker.js",
     "lint": "eslint \"{src,test}/**/*.ts\" --fix",
+    "lint:check": "eslint \"{src,test}/**/*.ts\" --max-warnings=100",
     "test": "jest",
     "test:watch": "jest --watch",
     "test:cov": "jest --coverage",

@@ -62,8 +62,10 @@ jobs:
       - name: Generate Prisma client
         run: npx prisma generate
 
+      # lint:check, not lint: `npm run lint` passes --fix, which rewrites the
+      # files and exits 0, so it can never fail the build.
       - name: Lint
-        run: npm run lint
+        run: npm run lint:check
 
       - name: Build
         run: npm run build
@@ -71,8 +73,10 @@ jobs:
       - name: Run database migrations
         run: npx prisma migrate deploy
 
+      # --coverage, or the thresholds in jest.config.js never execute and the
+      # 80% gate is declared but unenforced.
       - name: Unit tests
-        run: npm test -- --ci
+        run: npm test -- --ci --coverage
 
       - name: E2E tests
         run: npm run test:e2e -- --ci
