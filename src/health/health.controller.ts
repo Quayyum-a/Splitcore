@@ -1,4 +1,5 @@
 import { Controller, Get, Inject } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { HealthCheck, HealthCheckService, HealthIndicatorResult } from '@nestjs/terminus';
 import { ApiTags, ApiOperation, ApiResponse } from '@nestjs/swagger';
 import { SkipThrottle } from '@nestjs/throttler';
@@ -11,16 +12,24 @@ import { REDIS_CLIENT } from '../redis/redis.module';
 // balancer or an uptime monitor hits every few seconds — it should say
 // "database reachable, Redis reachable" and nothing more.
 //
-// @SkipThrottle() exempts this endpoint from rate limiting so health checks
-// from Render, monitoring tools, and load balancers don't get throttled.
+// @SkipThrottle() exempts this endpoint from the default rate limit so
+// health checks from Render, monitoring tools, and load balancers — which
+// poll every few seconds from one address — don't get throttled.
 @ApiTags('health')
 @Controller('health')
 export class HealthController {
+  private readonly redisEnabled: boolean;
+
   constructor(
     private readonly health: HealthCheckService,
     private readonly prisma: PrismaService,
-    @Inject(REDIS_CLIENT) private readonly redis: Redis,
-  ) {}
+    // Nullable by contract: null whenever REDIS_ENABLED=false, and a health
+    // check must never be the thing that takes the service down.
+    @Inject(REDIS_CLIENT) private readonly redis: Redis | null,
+    configService: ConfigService,
+  ) {
+    this.redisEnabled = configService.get<boolean>('redis.enabled') ?? true;
+  }
 
   @Get()
   @Public()
@@ -36,10 +45,16 @@ export class HealthController {
     description: 'Service unavailable - one or more dependencies are down',
   })
   check() {
-    return this.health.check([
-      (): Promise<HealthIndicatorResult> => this.checkDatabase(),
-      (): Promise<HealthIndicatorResult> => this.checkRedis(),
-    ]);
+    const indicators: Array<() => Promise<HealthIndicatorResult>> = [() => this.checkDatabase()];
+
+    // Report Redis only when it is part of this deployment. Permanently
+    // showing a switched-off dependency as "down" trains everyone to ignore
+    // the health check.
+    if (this.redisEnabled) {
+      indicators.push(() => this.checkRedis());
+    }
+
+    return this.health.check(indicators);
   }
 
   private async checkDatabase(): Promise<HealthIndicatorResult> {
@@ -51,7 +66,16 @@ export class HealthController {
     }
   }
 
+  /**
+   * Redis is a non-critical dependency: queueing and caching degrade without
+   * it, but the API still serves traffic. So this reports "down" and never
+   * throws — the overall check stays 200 and the platform keeps the instance
+   * in rotation, while the detail shows an operator what is broken.
+   */
   private async checkRedis(): Promise<HealthIndicatorResult> {
+    if (!this.redis) {
+      return { redis: { status: 'down', message: 'Redis client not initialized' } };
+    }
     try {
       const pong = await this.redis.ping();
       return { redis: { status: pong === 'PONG' ? 'up' : 'down' } };

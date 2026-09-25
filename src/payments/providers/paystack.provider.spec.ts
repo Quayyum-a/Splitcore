@@ -220,5 +220,22 @@ describe('PaystackProvider', () => {
       const isValid = provider.verifyWebhookSignature(payload, null as any);
       expect(isValid).toBe(false);
     });
+
+    it('should reject a malformed (non-hex / wrong length) signature without throwing', () => {
+      const payload = Buffer.from(JSON.stringify({ event: 'charge.success' }));
+      expect(provider.verifyWebhookSignature(payload, 'not-hex')).toBe(false);
+      expect(provider.verifyWebhookSignature(payload, 'abcd')).toBe(false);
+    });
+
+    it('should reject everything when no secret key is configured', () => {
+      // HMAC with an empty key is computable by anyone, so it must not verify.
+      const unconfigured = new PaystackProvider({
+        get: () => undefined,
+      } as unknown as ConfigService);
+      const payload = Buffer.from(JSON.stringify({ event: 'charge.success' }));
+      const forged = crypto.createHmac('sha512', '').update(payload).digest('hex');
+
+      expect(unconfigured.verifyWebhookSignature(payload, forged)).toBe(false);
+    });
   });
 });

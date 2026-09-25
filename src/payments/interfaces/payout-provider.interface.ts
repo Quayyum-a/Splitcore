@@ -137,7 +137,7 @@ export interface TransferVerification {
   /**
    * Current transfer status
    */
-  status: 'pending' | 'success' | 'failed' | 'reversed';
+  status: 'pending' | 'success' | 'failed' | 'reversed' | 'not_found';
 
   /**
    * Amount transferred in kobo
@@ -166,7 +166,20 @@ export interface TransferVerification {
  * All payout processors must implement this interface.
  * First implementation: PaystackPayoutProvider
  */
+/**
+ * DI token for the active PayoutProvider.
+ */
+export const PAYOUT_PROVIDER = Symbol('PAYOUT_PROVIDER');
+
 export interface PayoutProvider {
+  readonly name: string;
+
+  /**
+   * Available balance (kobo) in the account transfers are paid from.
+   * Used by reconciliation only.
+   */
+  getBalance(): Promise<number>;
+
   /**
    * Create a transfer recipient
    * This registers a bank account with the provider

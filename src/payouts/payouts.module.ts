@@ -1,16 +1,18 @@
 import { Module } from '@nestjs/common';
 import { PayoutsService } from './payouts.service';
 import { PrismaModule } from '../prisma/prisma.module';
-import { PaymentsModule } from '../payments/payments.module';
+import { PaymentProvidersModule } from '../payments/providers/payment-providers.module';
+import { LedgerModule } from '../ledger/ledger.module';
+import { QueueModule } from '../queue/queue.module';
 
 /**
  * Payouts Module
  *
- * Handles payout creation and processing.
- * Integrates with Paystack Transfers API for instant payouts.
+ * Per-tip transfers via the PayoutProvider abstraction, debiting the ledger
+ * only on confirmed delivery.
  */
 @Module({
-  imports: [PrismaModule, PaymentsModule],
+  imports: [PrismaModule, PaymentProvidersModule, LedgerModule, QueueModule],
   providers: [PayoutsService],
   exports: [PayoutsService],
 })

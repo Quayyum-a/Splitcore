@@ -1,6 +1,7 @@
 # compiled output
 /dist
 /node_modules
+*.tsbuildinfo
 
 # Logs
 logs
@@ -19,6 +20,8 @@ yarn-error.log*
 
 # IDEs and editors
 /.idea
+# VS Code Local History extension — snapshots files verbatim, including .env
+.history/
 .project
 .classpath
 .c9/

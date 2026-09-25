@@ -12,6 +12,11 @@ services:
     branch: main
     
     envVars:
+      # Pin the runtime. Render otherwise tracks latest (Node 24), which has
+      # no prebuilt @sentry/profiling-node binaries and is not what CI tests.
+      - key: NODE_VERSION
+        value: 22
+      
       - key: NODE_ENV
         value: production
       
@@ -23,9 +28,16 @@ services:
         # Set in Render dashboard:
         # postgresql://postgres:PASSWORD@db.PROJECT_REF.supabase.co:5432/postgres?sslmode=require&pgbouncer=true&connection_limit=10
       
+      # Set to false to run with no Redis at all: no queue, webhooks are
+      # processed inline on the request. A stopgap (exhausted provider quota),
+      # not a steady state — the worker service cannot run in this mode.
+      - key: REDIS_ENABLED
+        value: true
+      
       - key: REDIS_HOST
         sync: false
-        # Set in Render dashboard from Upstash (e.g., your-instance.upstash.io)
+        # Set in Render dashboard from Upstash. A bare host or a full
+        # rediss:// connection URL both work.
       
       - key: REDIS_PORT
         value: 6379
@@ -63,6 +75,9 @@ services:
     branch: main
     
     envVars:
+      - key: NODE_VERSION
+        value: 22
+      
       - key: NODE_ENV
         value: production
       

@@ -57,3 +57,37 @@ if (SENTRY_DSN) {
     ignoreErrors: ['UnauthorizedException', 'ForbiddenException', 'NotFoundException'],
   });
 }
+
+/**
+ * Keep an unhandled rejection from killing the process.
+ *
+ * Node exits on an unhandled rejection by default, and that is exactly how a
+ * deploy died: an ioredis ReplyError ("max requests limit exceeded") rejected
+ * with no handler attached during startup, the process exited before
+ * app.listen() ever ran, and the platform reported "no open ports" for ten
+ * minutes with the real cause five lines further up.
+ *
+ * A dependency that the application is designed to degrade without must not
+ * be able to take the process down by rejecting in a background task. These
+ * are still real defects, so they are logged loudly and reported to Sentry —
+ * they are just not fatal.
+ *
+ * An uncaughtException is a different thing: the process may be in an
+ * inconsistent state after one, so it is recorded and then rethrown by
+ * letting Node take its default action.
+ */
+process.on('unhandledRejection', (reason) => {
+  console.error('[unhandledRejection] continuing with degraded functionality:', reason);
+  if (SENTRY_DSN) {
+    Sentry.captureException(reason, { level: 'error', tags: { kind: 'unhandledRejection' } });
+  }
+});
+
+process.on('uncaughtException', (error) => {
+  console.error('[uncaughtException]', error);
+  if (SENTRY_DSN) {
+    Sentry.captureException(error, { level: 'fatal', tags: { kind: 'uncaughtException' } });
+  }
+  // Flush what we can, then let the process die as Node intends.
+  void Sentry.close(2000).then(() => process.exit(1));
+});

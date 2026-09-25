@@ -1,31 +1,23 @@
 import { Module } from '@nestjs/common';
-import { BullModule } from '@nestjs/bullmq';
 import { WebhooksController } from './webhooks.controller';
 import { WebhooksService } from './webhooks.service';
-import { WebhooksProcessor } from './webhooks.processor';
+import { WebhookEventHandler } from './webhook-event-handler.service';
 import { PrismaModule } from '../prisma/prisma.module';
 import { PaymentsModule } from '../payments/payments.module';
-import { LedgerModule } from '../ledger/ledger.module';
 import { PayoutsModule } from '../payouts/payouts.module';
+import { QueueModule } from '../queue/queue.module';
 
 /**
  * Webhooks Module
  *
- * Handles incoming webhooks from payment providers.
- * Provides signature verification, idempotency, and async processing.
+ * API side: WebhooksController + WebhooksService (verify, store, enqueue).
+ * Worker side: WebhookEventHandler, driven by WebhooksProcessor, which is
+ * registered only in QueueProcessorsModule.
  */
 @Module({
-  imports: [
-    PrismaModule,
-    PaymentsModule, // For PaystackProvider
-    LedgerModule, // For LedgerService
-    PayoutsModule, // For PayoutsService
-    BullModule.registerQueue({
-      name: 'webhooks',
-    }),
-  ],
+  imports: [PrismaModule, PaymentsModule, PayoutsModule, QueueModule],
   controllers: [WebhooksController],
-  providers: [WebhooksService, WebhooksProcessor],
-  exports: [WebhooksService],
+  providers: [WebhooksService, WebhookEventHandler],
+  exports: [WebhookEventHandler],
 })
 export class WebhooksModule {}

@@ -17,6 +17,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { REDIS_CLIENT } from '../redis/redis.module';
 import { ConfigService } from '@nestjs/config';
 import Redis from 'ioredis';
+import { parseRedisHost } from '../config/configuration';
 
 describe('HealthController - Preservation Properties (Baseline)', () => {
   let controller: HealthController;
@@ -24,26 +25,30 @@ describe('HealthController - Preservation Properties (Baseline)', () => {
   let redis: Redis;
 
   beforeAll(async () => {
-    // Create a real Redis connection for baseline testing
-    let host = process.env.REDIS_HOST || 'localhost';
+    // Real Redis connection for baseline testing. Host/TLS go through the
+    // same normalizer the app uses, so a provider connection URL in
+    // REDIS_HOST works here exactly as it does at runtime.
+    const { host, tlsFromScheme } = parseRedisHost(process.env.REDIS_HOST);
     const port = parseInt(process.env.REDIS_PORT || '6379');
     const password = process.env.REDIS_PASSWORD;
-
-    // Remove https:// prefix if present (Upstash URLs include it but ioredis doesn't need it)
-    host = host.replace(/^https?:\/\//, '');
 
     redis = new Redis({
       host,
       port,
       password,
-      tls: password ? {} : undefined,
+      tls: tlsFromScheme || password ? {} : undefined,
       connectTimeout: 15000,
-      lazyConnect: true,
+      // No lazyConnect: ioredis then owns the connection and reconnects on
+      // its own if the socket drops between the setup and the assertions,
+      // which is what made this suite flaky under a loaded full-suite run.
     });
 
     try {
-      await redis.connect();
-      await redis.ping(); // Ensure Redis is connected
+      await new Promise<void>((resolve, reject) => {
+        redis.once('ready', resolve);
+        redis.once('error', reject);
+      });
+      await redis.ping();
     } catch (error) {
       console.error('Failed to connect to Redis in test setup:', error);
       throw error;
@@ -83,6 +88,10 @@ describe('HealthController - Preservation Properties (Baseline)', () => {
         {
           provide: REDIS_CLIENT,
           useValue: redis,
+        },
+        {
+          provide: ConfigService,
+          useValue: { get: jest.fn(() => true) },
         },
       ],
     }).compile();

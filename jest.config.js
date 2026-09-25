@@ -16,6 +16,12 @@ module.exports = {
     '!**/*.config.ts',
     '!**/main.ts',
     '!**/worker.ts',
+    // Nest module files are declarative wiring with no branches to exercise;
+    // the e2e suite proves the graph resolves, which is the only thing that
+    // can actually be wrong in them.
+    '!**/*.module.ts',
+    // Documentation, not shipped behaviour.
+    '!**/*.example.ts',
   ],
   coverageDirectory: '../coverage',
   coverageReporters: ['json', 'lcov', 'text', 'html'],
@@ -28,6 +34,11 @@ module.exports = {
     },
   },
   testEnvironment: 'node',
+  // Pins REDIS_* before @prisma/client can load a developer .env; see the file.
+  setupFiles: ['<rootDir>/../test/setup-unit-env.ts'],
+  // nanoid ships ESM only; it must be transformed rather than skipped as a
+  // node_modules dependency. test/jest-e2e.json carries the same exception.
+  transformIgnorePatterns: ['node_modules/(?!(nanoid)/)'],
   moduleNameMapper: {
     '^src/(.*)$': '<rootDir>/$1',
   },

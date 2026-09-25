@@ -1,4 +1,5 @@
 import {
+  Inject,
   Injectable,
   Logger,
   NotFoundException,
@@ -6,118 +7,89 @@ import {
   GoneException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { PrismaService } from '../prisma/prisma.service';
-import { PaystackProvider } from './providers/paystack.provider';
-import { InitializePaymentDto, PaymentInitResponseDto, PaymentStatusResponseDto } from './dto';
 import { nanoid } from 'nanoid';
+import { PrismaService } from '../prisma/prisma.service';
+import { SplitRulesService } from '../split-rules/split-rules.service';
+import { PAYMENT_PROVIDER, PaymentProvider } from './interfaces';
+import { PaymentSettlementService } from './payment-settlement.service';
+import { InitializePaymentDto, PaymentInitResponseDto, PaymentStatusResponseDto } from './dto';
 
 /**
  * Payments Service
  *
- * Handles payment initialization and status checking.
- * Critical rules:
- * 1. Generate externalReference ourselves (don't rely on provider's reference alone)
- * 2. Never trust client-side redirect as proof of payment
- * 3. Only mark SUCCESS after webhook OR explicit verify call
- * 4. Reject payment if no active split rule exists for venue
+ * 1. We generate externalReference ourselves; the DB unique index rejects reuse.
+ * 2. A client redirect back from checkout proves nothing. SUCCESS is only
+ *    ever set by PaymentSettlementService after verifying with the provider.
+ * 3. No active split rule for the venue = no payment. The rule in force at
+ *    initialization is snapshotted onto the payment and used at settlement.
  */
 @Injectable()
 export class PaymentsService {
   private readonly logger = new Logger(PaymentsService.name);
-  private readonly callbackBaseUrl: string;
+  private readonly callbackUrl: string | undefined;
 
   constructor(
     private readonly prisma: PrismaService,
-    private readonly paystackProvider: PaystackProvider,
-    private readonly configService: ConfigService,
+    private readonly splitRules: SplitRulesService,
+    private readonly settlement: PaymentSettlementService,
+    @Inject(PAYMENT_PROVIDER) private readonly paymentProvider: PaymentProvider,
+    configService: ConfigService,
   ) {
-    // Base URL for payment callbacks (e.g., https://api.splitcore.app)
-    this.callbackBaseUrl = this.configService.get<string>('APP_URL') || 'http://localhost:3000';
+    // Where the provider sends the guest after checkout: the frontend's
+    // "confirming your payment" page, which polls GET /payments/:ref/status.
+    // Unset = the callback configured in the provider dashboard is used.
+    this.callbackUrl = configService.get<string>('PAYMENT_CALLBACK_URL') || undefined;
   }
 
-  /**
-   * Initialize a payment transaction
-   *
-   * Flow:
-   * 1. Validate guest session exists and is active
-   * 2. Check venue has active split rule (HARD FAILURE if not - can't divide money we don't know how to split)
-   * 3. Create PaymentTransaction in CREATED state
-   * 4. Call Paystack to get checkout URL
-   * 5. Return checkout URL to redirect guest to
-   */
   async initializePayment(dto: InitializePaymentDto): Promise<PaymentInitResponseDto> {
-    // Validate guest session
     const guestSession = await this.prisma.guestSession.findUnique({
       where: { id: dto.sessionId },
-      include: {
-        qrCode: {
-          include: {
-            venue: true,
-            entertainer: true,
-          },
-        },
-      },
+      include: { qrCode: { include: { venue: true, entertainer: true } } },
     });
 
     if (!guestSession) {
       throw new NotFoundException('Guest session not found');
     }
-
-    // Check if session has expired
     if (new Date() > guestSession.expiresAt) {
       throw new GoneException('Guest session has expired');
     }
-
-    // Check if QR code is active
-    if (!guestSession.qrCode.isActive || guestSession.qrCode.deactivatedAt) {
+    const { qrCode } = guestSession;
+    if (!qrCode.isActive || qrCode.deactivatedAt) {
       throw new GoneException('QR code is no longer active');
     }
-
-    // Check if venue is active
-    if (!guestSession.qrCode.venue.isActive) {
+    if (!qrCode.venue.isActive) {
       throw new GoneException('Venue is no longer active');
     }
-
-    // Check if entertainer (if any) is active
-    if (guestSession.qrCode.entertainer && !guestSession.qrCode.entertainer.isActive) {
+    if (qrCode.entertainer && !qrCode.entertainer.isActive) {
       throw new GoneException('Entertainer is no longer active');
     }
 
-    // CRITICAL: Check venue has active split rule
-    // A missing split rule is a HARD FAILURE - we cannot accept money we don't know how to divide
-    const activeSplitRule = await this.prisma.splitRule.findFirst({
-      where: {
-        venueId: guestSession.qrCode.venueId,
-        effectiveFrom: { lte: new Date() },
-        OR: [{ effectiveTo: null }, { effectiveTo: { gt: new Date() } }],
-      },
-      orderBy: { effectiveFrom: 'desc' },
+    // Hard failure: never accept money we don't yet know how to divide.
+    const splitRule = await this.splitRules.findActiveByVenue(qrCode.venueId).catch((error) => {
+      if (error instanceof NotFoundException) {
+        this.logger.error('Payment initialization blocked: no active split rule', {
+          venueId: qrCode.venueId,
+        });
+        throw new BadRequestException(
+          'Payment cannot be processed: venue split configuration is not set up. Please contact venue staff.',
+        );
+      }
+      throw error;
     });
 
-    if (!activeSplitRule) {
-      this.logger.error('Payment initialization blocked: no active split rule', {
-        venueId: guestSession.qrCode.venueId,
-        venueName: guestSession.qrCode.venue.name,
-      });
-      throw new BadRequestException(
-        'Payment cannot be processed: venue split configuration is not set up. Please contact venue staff.',
-      );
-    }
-
-    // Generate our own reference (primary defense against double-processing)
     const externalReference = `pay_${nanoid(21)}`;
 
-    // Create payment transaction in CREATED state
     const paymentTransaction = await this.prisma.paymentTransaction.create({
       data: {
         externalReference,
-        provider: 'paystack',
-        venueId: guestSession.qrCode.venueId,
-        entertainerId: guestSession.qrCode.entertainerId,
+        provider: this.paymentProvider.name,
+        venueId: qrCode.venueId,
+        entertainerId: qrCode.entertainerId,
         guestSessionId: dto.sessionId,
         grossAmountKobo: dto.amountKobo,
         guestDisplayName: dto.guestDisplayName,
         displayNameEnabled: dto.displayNameEnabled ?? false,
+        splitRuleId: splitRule.id,
         status: 'CREATED',
       },
     });
@@ -126,42 +98,40 @@ export class PaymentsService {
       transactionId: paymentTransaction.id,
       reference: externalReference,
       amountKobo: dto.amountKobo,
-      venueId: guestSession.qrCode.venueId,
-      entertainerId: guestSession.qrCode.entertainerId,
+      venueId: qrCode.venueId,
+      entertainerId: qrCode.entertainerId,
+      splitRuleId: splitRule.id,
     });
 
-    // Initialize payment with Paystack
     try {
-      const paystackResult = await this.paystackProvider.initializePayment({
+      const init = await this.paymentProvider.initializePayment({
         reference: externalReference,
         amountKobo: dto.amountKobo,
         email: dto.email,
-        callbackUrl: `${this.callbackBaseUrl}/payments/callback?reference=${externalReference}`,
+        callbackUrl: this.buildCallbackUrl(externalReference),
         metadata: {
           transactionId: paymentTransaction.id,
-          venueId: guestSession.qrCode.venueId,
-          entertainerId: guestSession.qrCode.entertainerId,
-          venueName: guestSession.qrCode.venue.name,
-          entertainerName: guestSession.qrCode.entertainer?.stageName,
+          venueId: qrCode.venueId,
+          entertainerId: qrCode.entertainerId,
         },
       });
 
       return {
         transactionId: paymentTransaction.id,
         reference: externalReference,
-        authorizationUrl: paystackResult.authorizationUrl,
-        accessCode: paystackResult.accessCode,
+        authorizationUrl: init.authorizationUrl,
+        accessCode: init.accessCode,
         amountKobo: dto.amountKobo,
         status: paymentTransaction.status,
       };
     } catch (error) {
-      this.logger.error('Failed to initialize Paystack payment', {
+      this.logger.error('Failed to initialize provider checkout', {
         transactionId: paymentTransaction.id,
         reference: externalReference,
         error: error instanceof Error ? error.message : String(error),
       });
 
-      // Update transaction status to FAILED
+      // The guest never received a checkout URL, so no money can have moved.
       await this.prisma.paymentTransaction.update({
         where: { id: paymentTransaction.id },
         data: { status: 'FAILED' },
@@ -174,82 +144,71 @@ export class PaymentsService {
   }
 
   /**
-   * Get payment status by reference
-   *
-   * This is the fallback verification when:
-   * - Guest returns from Paystack checkout
-   * - Webhook hasn't fired yet
-   *
-   * We explicitly verify with Paystack API (not just checking our DB)
-   * NEVER trust client-side redirect alone
+   * Adds the reference to the configured callback URL, preserving any query
+   * string it already carries. Paystack appends its own `reference` and
+   * `trxref` on top, so the handler on the other end has to tolerate a
+   * repeated parameter either way.
+   */
+  private buildCallbackUrl(reference: string): string | undefined {
+    if (!this.callbackUrl) return undefined;
+
+    try {
+      const url = new URL(this.callbackUrl);
+      url.searchParams.set('reference', reference);
+      return url.toString();
+    } catch {
+      this.logger.warn(
+        'PAYMENT_CALLBACK_URL is not a valid URL; falling back to the provider default',
+        {
+          callbackUrl: this.callbackUrl,
+        },
+      );
+      return undefined;
+    }
+  }
+
+  /**
+   * Guest-facing status. While the payment is unconfirmed this runs the same
+   * settlement path the webhook does (verify with the provider, then post
+   * the ledger), so a delayed webhook shows as PENDING, never as a
+   * frontend-only success.
    */
   async getPaymentStatus(reference: string): Promise<PaymentStatusResponseDto> {
-    // Find payment transaction
-    const paymentTransaction = await this.prisma.paymentTransaction.findUnique({
+    const existing = await this.prisma.paymentTransaction.findUnique({
       where: { externalReference: reference },
-      include: {
-        venue: true,
-        entertainer: true,
-      },
+      select: { status: true },
     });
 
-    if (!paymentTransaction) {
+    if (!existing) {
       throw new NotFoundException('Payment not found');
     }
 
-    // If status is still CREATED or PENDING, verify with Paystack
-    if (paymentTransaction.status === 'CREATED' || paymentTransaction.status === 'PENDING') {
+    if (existing.status === 'CREATED' || existing.status === 'PENDING') {
       try {
-        const verification = await this.paystackProvider.verifyPayment(reference);
-
-        // Update our status based on Paystack's response
-        let newStatus:
-          'CREATED' | 'PENDING' | 'SUCCESS' | 'FAILED' | 'ABANDONED' | 'REVERSED' | 'REFUNDED' =
-          paymentTransaction.status as any;
-        if (verification.status === 'success') {
-          newStatus = 'SUCCESS';
-        } else if (verification.status === 'failed') {
-          newStatus = 'FAILED';
-        } else if (verification.status === 'abandoned') {
-          newStatus = 'ABANDONED';
-        } else {
-          newStatus = 'PENDING';
-        }
-
-        // Only update if status changed
-        if (newStatus !== paymentTransaction.status) {
-          await this.prisma.paymentTransaction.update({
-            where: { id: paymentTransaction.id },
-            data: { status: newStatus },
-          });
-
-          this.logger.log('Payment status updated via fallback verification', {
-            transactionId: paymentTransaction.id,
-            reference,
-            oldStatus: paymentTransaction.status,
-            newStatus,
-          });
-
-          paymentTransaction.status = newStatus as any;
-        }
+        await this.settlement.settle(reference);
       } catch (error) {
-        this.logger.error('Failed to verify payment with Paystack', {
+        // Report the stored status; the webhook path will retry settlement.
+        this.logger.error('Fallback settlement failed', {
           reference,
           error: error instanceof Error ? error.message : String(error),
         });
-        // Don't throw - return current status even if verification fails
       }
     }
 
+    const payment = await this.prisma.paymentTransaction.findUniqueOrThrow({
+      where: { externalReference: reference },
+      include: { venue: true, entertainer: true },
+    });
+
     return {
-      transactionId: paymentTransaction.id,
-      reference: paymentTransaction.externalReference,
-      status: paymentTransaction.status,
-      amountKobo: paymentTransaction.grossAmountKobo,
-      venueName: paymentTransaction.venue.name,
-      entertainerName: paymentTransaction.entertainer?.stageName ?? null,
-      createdAt: paymentTransaction.createdAt,
-      updatedAt: paymentTransaction.updatedAt,
+      transactionId: payment.id,
+      reference: payment.externalReference,
+      status: payment.status,
+      amountKobo: payment.grossAmountKobo,
+      venueName: payment.venue.name,
+      entertainerName: payment.entertainer?.stageName ?? null,
+      createdAt: payment.createdAt,
+      updatedAt: payment.updatedAt,
     };
   }
 }

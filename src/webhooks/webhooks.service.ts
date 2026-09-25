@@ -1,129 +1,150 @@
-import { Injectable, Logger, BadRequestException } from '@nestjs/common';
+import {
+  Inject,
+  Injectable,
+  Logger,
+  UnauthorizedException,
+  BadRequestException,
+} from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { InjectQueue } from '@nestjs/bullmq';
 import { Queue } from 'bullmq';
+import { Prisma, WebhookEvent } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
-import { PaystackProvider } from '../payments/providers/paystack.provider';
+import { PAYMENT_PROVIDER, PaymentProvider } from '../payments/interfaces';
+import { WEBHOOKS_QUEUE } from '../queue/queue.module';
+import { withTimeout } from '../common/utils/with-timeout';
+import { WebhookEventHandler } from './webhook-event-handler.service';
+
+const ENQUEUE_TIMEOUT_MS = 2000;
+
+export interface WebhookJobData {
+  webhookEventId: string;
+}
+
+export interface PaystackWebhookPayload {
+  event?: string;
+  data?: { id?: number | string; reference?: string; [key: string]: unknown };
+}
+
+export type IngestResult = 'queued' | 'duplicate';
 
 /**
- * Webhooks Service
+ * Webhook ingest: the synchronous, fast part of webhook handling.
  *
- * Handles webhook event processing with these guarantees:
- * 1. Signature verification (reject bad signatures immediately)
- * 2. Unconditional storage (even if duplicate)
- * 3. Idempotency (duplicate events are no-ops)
- * 4. Fast acknowledgment (< 2 seconds)
- * 5. Async processing (BullMQ queue)
+ * 1. Verify the signature. Nothing unsigned is stored or processed.
+ * 2. Store the raw event. externalEventId is unique in the DB, so a
+ *    duplicate delivery (Paystack retries anything not 200'd quickly)
+ *    can't create a second row, even when two copies arrive concurrently.
+ * 3. Enqueue processing and return. Ledger work happens in the worker.
+ *
+ * If enqueueing fails, the error propagates as a 5xx so Paystack retries;
+ * the retry hits the duplicate path, which re-enqueues any event not yet
+ * COMPLETED. An event is never stored-but-forgotten.
+ *
+ * With REDIS_ENABLED=false there is no queue and no worker, so step 3 runs
+ * the handler inline instead. That costs the caller one provider
+ * verification round-trip before the ack, but the alternative — storing the
+ * event and having nothing ever process it — means payments silently never
+ * settle.
  */
 @Injectable()
 export class WebhooksService {
   private readonly logger = new Logger(WebhooksService.name);
 
+  private readonly queueEnabled: boolean;
+
   constructor(
     private readonly prisma: PrismaService,
-    private readonly paystackProvider: PaystackProvider,
-    @InjectQueue('webhooks') private readonly webhookQueue: Queue,
-  ) {}
+    @Inject(PAYMENT_PROVIDER) private readonly paymentProvider: PaymentProvider,
+    @InjectQueue(WEBHOOKS_QUEUE) private readonly webhookQueue: Queue<WebhookJobData>,
+    private readonly handler: WebhookEventHandler,
+    configService: ConfigService,
+  ) {
+    this.queueEnabled = configService.get<boolean>('redis.enabled') ?? true;
+  }
+
+  async ingest(
+    rawBody: Buffer,
+    signature: string | undefined,
+    payload: PaystackWebhookPayload,
+  ): Promise<IngestResult> {
+    if (!signature || !this.paymentProvider.verifyWebhookSignature(rawBody, signature)) {
+      this.logger.warn('Rejected webhook with invalid or missing signature', {
+        provider: this.paymentProvider.name,
+        eventType: typeof payload?.event === 'string' ? payload.event : undefined,
+      });
+      throw new UnauthorizedException('Invalid webhook signature');
+    }
+
+    const eventType = payload?.event;
+    const eventKey = payload?.data?.id ?? payload?.data?.reference;
+    if (typeof eventType !== 'string' || eventKey === undefined || eventKey === null) {
+      throw new BadRequestException('Webhook payload missing event type or data identifier');
+    }
+
+    // Paystack payloads carry no top-level event id. The same event for the
+    // same object (e.g. charge.success for transaction 302961) is the unit
+    // of deduplication; a later transfer.reversed for a transfer that
+    // earlier sent transfer.success is a distinct event.
+    const externalEventId = `${this.paymentProvider.name}:${eventType}:${eventKey}`;
+
+    let event: WebhookEvent;
+    try {
+      event = await this.prisma.webhookEvent.create({
+        data: {
+          provider: this.paymentProvider.name,
+          eventType,
+          externalEventId,
+          signature,
+          payload: payload as Prisma.InputJsonValue,
+        },
+      });
+    } catch (error) {
+      if (!(error instanceof Prisma.PrismaClientKnownRequestError) || error.code !== 'P2002') {
+        throw error;
+      }
+      const existing = await this.prisma.webhookEvent.findUniqueOrThrow({
+        where: { externalEventId },
+      });
+      this.logger.log('Duplicate webhook ignored', {
+        externalEventId,
+        processingStatus: existing.processingStatus,
+      });
+      if (existing.processingStatus !== 'COMPLETED') {
+        await this.enqueue(existing.id);
+      }
+      return 'duplicate';
+    }
+
+    await this.enqueue(event.id);
+    this.logger.log('Webhook stored and queued', { webhookEventId: event.id, externalEventId });
+    return 'queued';
+  }
 
   /**
-   * Handle Paystack webhook
-   *
-   * Flow:
-   * 1. Verify signature (REJECT if invalid)
-   * 2. Store raw event (ALWAYS, even duplicates)
-   * 3. Check if already processed (idempotency)
-   * 4. Queue for async processing if new
-   * 5. Return 200 to Paystack (fast!)
+   * Hand the stored event to the worker — or, with no worker to hand it to,
+   * process it here. Either way this either succeeds or throws, and a throw
+   * becomes a 5xx that makes the provider retry.
    */
-  async handlePaystackWebhook(rawBody: Buffer, signature: string, payload: any): Promise<void> {
-    // STEP 1: Verify signature
-    const isValid = this.paystackProvider.verifyWebhookSignature(rawBody, signature);
-
-    if (!isValid) {
-      this.logger.error('Invalid webhook signature', {
-        eventType: payload?.event,
-        payloadPreview: JSON.stringify(payload).substring(0, 100),
-      });
-      throw new BadRequestException('Invalid webhook signature');
-    }
-
-    this.logger.log('Webhook signature verified', {
-      eventType: payload?.event,
-      eventId: payload?.id,
-    });
-
-    // Extract event ID from payload
-    const externalEventId = payload?.id?.toString() || payload?.event_id?.toString();
-
-    if (!externalEventId) {
-      this.logger.error('No event ID in webhook payload', {
-        payload: JSON.stringify(payload).substring(0, 200),
-      });
-      throw new BadRequestException('Webhook payload missing event ID');
-    }
-
-    // STEP 2: Check for duplicate (idempotency)
-    const existingEvent = await this.prisma.webhookEvent.findUnique({
-      where: { externalEventId },
-    });
-
-    if (existingEvent) {
-      this.logger.log('Duplicate webhook event received (idempotency)', {
-        externalEventId,
-        eventType: payload?.event,
-        originalReceivedAt: existingEvent.receivedAt,
-        processingStatus: existingEvent.processingStatus,
-      });
-
-      // Duplicate is a no-op, but still return success to Paystack
+  private async enqueue(webhookEventId: string): Promise<void> {
+    if (!this.queueEnabled) {
+      await this.handler.handle(webhookEventId);
       return;
     }
 
-    // STEP 3: Store raw event
-    const webhookEvent = await this.prisma.webhookEvent.create({
-      data: {
-        provider: 'paystack',
-        eventType: payload?.event || 'unknown',
-        externalEventId,
-        signature,
-        payload,
-        processingStatus: 'PENDING',
-      },
-    });
-
-    this.logger.log('Webhook event stored', {
-      webhookEventId: webhookEvent.id,
-      externalEventId,
-      eventType: webhookEvent.eventType,
-    });
-
-    // STEP 4: Queue for async processing
-    await this.webhookQueue.add(
-      'process-webhook',
-      {
-        webhookEventId: webhookEvent.id,
-        provider: 'paystack',
-        eventType: webhookEvent.eventType,
-        externalEventId,
-      },
-      {
-        attempts: 3,
-        backoff: {
-          type: 'exponential',
-          delay: 2000, // Start with 2s, then 4s, then 8s
+    await withTimeout(
+      this.webhookQueue.add(
+        'process-webhook',
+        { webhookEventId },
+        {
+          jobId: `webhook:${webhookEventId}`,
+          attempts: 5,
+          backoff: { type: 'exponential', delay: 2000 },
+          removeOnComplete: true,
+          removeOnFail: { age: 604800 },
         },
-        removeOnComplete: {
-          age: 86400, // Keep completed jobs for 24 hours
-          count: 1000,
-        },
-        removeOnFail: {
-          age: 604800, // Keep failed jobs for 7 days
-        },
-      },
+      ),
+      ENQUEUE_TIMEOUT_MS,
     );
-
-    this.logger.log('Webhook event queued for processing', {
-      webhookEventId: webhookEvent.id,
-      externalEventId,
-    });
   }
 }

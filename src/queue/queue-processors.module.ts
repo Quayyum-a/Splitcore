@@ -1,5 +1,15 @@
 import { Module } from '@nestjs/common';
 import { DiagnosticsProcessor } from './diagnostics.processor';
+import {
+  WebhooksProcessor,
+  PayoutsProcessor,
+  ReconciliationProcessor,
+} from './payments.processors';
+import { JobSchedulerService } from './job-scheduler.service';
+import { QueueModule } from './queue.module';
+import { WebhooksModule } from '../webhooks/webhooks.module';
+import { PayoutsModule } from '../payouts/payouts.module';
+import { ReconciliationModule } from '../reconciliation/reconciliation.module';
 
 /**
  * QueueProcessorsModule registers all BullMQ job processors.
@@ -17,7 +27,14 @@ import { DiagnosticsProcessor } from './diagnostics.processor';
  * 3. Add the processor to the providers array below
  */
 @Module({
-  providers: [DiagnosticsProcessor],
+  imports: [QueueModule, WebhooksModule, PayoutsModule, ReconciliationModule],
+  providers: [
+    DiagnosticsProcessor,
+    WebhooksProcessor,
+    PayoutsProcessor,
+    ReconciliationProcessor,
+    JobSchedulerService,
+  ],
   exports: [DiagnosticsProcessor],
 })
 export class QueueProcessorsModule {}

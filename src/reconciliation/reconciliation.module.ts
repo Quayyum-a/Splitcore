@@ -1,17 +1,18 @@
 import { Module } from '@nestjs/common';
-import { ScheduleModule } from '@nestjs/schedule';
 import { ReconciliationService } from './reconciliation.service';
 import { PrismaModule } from '../prisma/prisma.module';
 import { LedgerModule } from '../ledger/ledger.module';
+import { PaymentProvidersModule } from '../payments/providers/payment-providers.module';
 
 /**
  * Reconciliation Module
  *
- * Provides hourly balance checks against Paystack API.
- * Detects drift between our ledger and actual balances.
+ * Ledger-vs-provider balance check. Scheduled as a BullMQ repeatable job in
+ * the worker (JobSchedulerService), so it runs once per hour no matter how
+ * many API instances are deployed.
  */
 @Module({
-  imports: [ScheduleModule.forRoot(), PrismaModule, LedgerModule],
+  imports: [PrismaModule, LedgerModule, PaymentProvidersModule],
   providers: [ReconciliationService],
   exports: [ReconciliationService],
 })

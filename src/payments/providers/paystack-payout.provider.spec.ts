@@ -258,7 +258,7 @@ describe('PaystackPayoutProvider', () => {
       expect(result.failureReason).toBe('Account name mismatch');
     });
 
-    it('should throw error on failed verification', async () => {
+    it('should report not_found when the provider has never seen the reference', async () => {
       global.fetch = jest.fn().mockResolvedValue({
         ok: false,
         status: 404,
@@ -266,9 +266,50 @@ describe('PaystackPayoutProvider', () => {
         json: async () => ({ message: 'Transfer not found' }),
       });
 
-      await expect(provider.verifyTransfer('invalid-ref')).rejects.toThrow(
+      await expect(provider.verifyTransfer('never-sent')).resolves.toMatchObject({
+        reference: 'never-sent',
+        status: 'not_found',
+      });
+    });
+
+    it('should throw on other failures, so an unknown outcome is never treated as not_found', async () => {
+      global.fetch = jest.fn().mockResolvedValue({
+        ok: false,
+        status: 500,
+        statusText: 'Server Error',
+        json: async () => ({ message: 'Internal error' }),
+      });
+
+      await expect(provider.verifyTransfer('some-ref')).rejects.toThrow(
         'Paystack transfer verification failed',
       );
+    });
+  });
+
+  describe('getBalance', () => {
+    it('returns the NGN balance in kobo', async () => {
+      global.fetch = jest.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          status: true,
+          data: [
+            { currency: 'USD', balance: 99 },
+            { currency: 'NGN', balance: 1234500 },
+          ],
+        }),
+      });
+
+      await expect(provider.getBalance()).resolves.toBe(1234500);
+    });
+
+    it('throws when the balance API fails', async () => {
+      global.fetch = jest.fn().mockResolvedValue({
+        ok: false,
+        statusText: 'Unauthorized',
+        json: async () => ({ message: 'Invalid key' }),
+      });
+
+      await expect(provider.getBalance()).rejects.toThrow('Paystack balance API failed');
     });
   });
 });

@@ -197,9 +197,9 @@ describe('RedisService - Preservation Properties (Baseline)', () => {
       expect(client).not.toBeNull();
 
       // Observe: The client has Redis methods
-      expect(typeof client.ping).toBe('function');
-      expect(typeof client.get).toBe('function');
-      expect(typeof client.set).toBe('function');
+      expect(typeof client!.ping).toBe('function');
+      expect(typeof client!.get).toBe('function');
+      expect(typeof client!.set).toBe('function');
 
       await module.close();
     }, 30000);
@@ -368,7 +368,7 @@ describe('RedisService - Preservation Properties (Baseline)', () => {
       const service = module.get<RedisService>(RedisService);
       await service.onModuleInit();
 
-      const client = service.getClient();
+      const client = service.getClient()!;
 
       // Observe: Can perform SET operation
       await client.set('test-key-preservation', 'test-value');

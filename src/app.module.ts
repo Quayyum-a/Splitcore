@@ -23,7 +23,6 @@ import { GuestModule } from './guest/guest.module';
 import { SplitRulesModule } from './split-rules/split-rules.module';
 import { PaymentsModule } from './payments/payments.module';
 import { WebhooksModule } from './webhooks/webhooks.module';
-import { ReconciliationModule } from './reconciliation/reconciliation.module';
 
 @Module({
   imports: [
@@ -47,7 +46,6 @@ import { ReconciliationModule } from './reconciliation/reconciliation.module';
     SplitRulesModule,
     PaymentsModule,
     WebhooksModule,
-    ReconciliationModule,
   ],
   providers: [
     // Runs on every request unless explicitly opted out with @Public().

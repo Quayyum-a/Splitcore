@@ -43,6 +43,10 @@ jobs:
       JWT_SECRET: ci-only-secret-not-for-production-use
       JWT_EXPIRES_IN: 1d
       LOG_LEVEL: warn
+      # Not real credentials — the E2E suite signs its own webhook payloads
+      # with this, and webhook verification rejects an empty secret outright.
+      PAYSTACK_SECRET_KEY: sk_test_ci_only_not_a_real_key
+      PAYSTACK_PUBLIC_KEY: pk_test_ci_only_not_a_real_key
 
     steps:
       - uses: actions/checkout@v4

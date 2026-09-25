@@ -23,6 +23,7 @@ import {
  */
 @Injectable()
 export class PaystackPayoutProvider implements PayoutProvider {
+  readonly name = 'paystack';
   private readonly logger = new Logger(PaystackPayoutProvider.name);
   private readonly secretKey: string;
   private readonly baseUrl = 'https://api.paystack.co';
@@ -66,7 +67,7 @@ export class PaystackPayoutProvider implements PayoutProvider {
         this.logger.error('Paystack recipient creation failed', {
           status: response.status,
           error: errorData,
-          accountNumber: params.accountNumber,
+          accountNumber: maskAccountNumber(params.accountNumber),
         });
         throw new Error(
           `Paystack recipient creation failed: ${errorData.message || response.statusText}`,
@@ -87,7 +88,7 @@ export class PaystackPayoutProvider implements PayoutProvider {
     } catch (error) {
       this.logger.error('Failed to create Paystack recipient', {
         error: error instanceof Error ? error.message : String(error),
-        accountNumber: params.accountNumber,
+        accountNumber: maskAccountNumber(params.accountNumber),
       });
       throw error;
     }
@@ -192,6 +193,13 @@ export class PaystackPayoutProvider implements PayoutProvider {
         },
       });
 
+      // A reference Paystack has never seen means the transfer was never
+      // created. The payout flow relies on telling that apart from "unknown
+      // right now" before it risks a second transfer with a new reference.
+      if (response.status === 404) {
+        return { reference, status: 'not_found', amountKobo: 0 };
+      }
+
       if (!response.ok) {
         const errorData = await response.json();
         this.logger.error('Paystack transfer verification failed', {
@@ -244,4 +252,28 @@ export class PaystackPayoutProvider implements PayoutProvider {
       throw error;
     }
   }
+
+  async getBalance(): Promise<number> {
+    const response = await fetch(`${this.baseUrl}/balance`, {
+      method: 'GET',
+      headers: { Authorization: `Bearer ${this.secretKey}` },
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      throw new Error(`Paystack balance API failed: ${errorData.message || response.statusText}`);
+    }
+
+    const data = await response.json();
+    if (!data.status || !Array.isArray(data.data)) {
+      throw new Error('Invalid Paystack balance response format');
+    }
+
+    const ngn = data.data.find((b: { currency: string }) => b.currency === 'NGN');
+    return ngn?.balance ?? 0;
+  }
+}
+
+function maskAccountNumber(accountNumber: string): string {
+  return accountNumber.length > 4 ? `******${accountNumber.slice(-4)}` : '****';
 }

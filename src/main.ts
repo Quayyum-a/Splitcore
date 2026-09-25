@@ -1,11 +1,11 @@
 // MUST be imported first to initialize Sentry before any other imports
 import './instrument';
 import { NestFactory } from '@nestjs/core';
+import { NestExpressApplication } from '@nestjs/platform-express';
 import { ConfigService } from '@nestjs/config';
 import { Logger } from 'nestjs-pino';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import helmet from 'helmet';
-import * as express from 'express';
 import { AppModule } from './app.module';
 import { getCorsOptions } from './config/cors.config';
 
@@ -13,7 +13,13 @@ async function bootstrap() {
   // bufferLogs holds any log lines emitted during module initialization
   // until the real (pino) logger is attached below, instead of losing them
   // to Nest's default console logger.
-  const app = await NestFactory.create(AppModule, { bufferLogs: true });
+  // rawBody keeps the exact request bytes on req.rawBody (alongside the
+  // parsed JSON body) so webhook signatures are verified against what the
+  // provider actually signed.
+  const app = await NestFactory.create<NestExpressApplication>(AppModule, {
+    bufferLogs: true,
+    rawBody: true,
+  });
 
   app.useLogger(app.get(Logger));
 
@@ -36,20 +42,9 @@ async function bootstrap() {
     }),
   );
 
-  // Raw body for webhook signature verification
-  // MUST be before json() middleware
-  app.use(
-    '/webhooks/*',
-    express.raw({ type: 'application/json', limit: '1mb' }),
-    (req: any, res: any, next: any) => {
-      req.rawBody = req.body;
-      next();
-    },
-  );
-
   // Payload size limits (1MB)
-  app.use(express.json({ limit: '1mb' }));
-  app.use(express.urlencoded({ extended: true, limit: '1mb' }));
+  app.useBodyParser('json', { limit: '1mb' });
+  app.useBodyParser('urlencoded', { extended: true, limit: '1mb' });
 
   // CORS configuration
   const config = app.get(ConfigService);

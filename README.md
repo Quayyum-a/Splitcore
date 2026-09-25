@@ -453,17 +453,25 @@ When `charge.success` webhook arrives:
 
 ### Reconciliation
 
-Automatic hourly check:
-```typescript
-@Cron(CronExpression.EVERY_HOUR)
-async runHourlyReconciliation() {
-  // Compare ledger vs Paystack balance
-  // Log ERROR if drift detected
-  // Stores audit trail
-}
+Runs hourly in the **worker** process, as a BullMQ repeatable job registered
+by `JobSchedulerService` (`upsertJobScheduler`, so restarts and a second
+worker don't multiply the schedule). `ReconciliationService.run()` compares
+what the ledger says is held at the processor against what the processor
+reports, and returns a report:
+
+```
+trialBalanced            debits === credits across the whole ledger
+ledgerClearingKobo       what the ledger says we hold at the processor
+inFlightPayoutsKobo      transfers debited but not yet confirmed
+driftKobo                providerBalance - (clearing - inFlight)
 ```
 
-Access via logs or expose admin endpoint (TODO: Phase 7).
+Drift is reported, never auto-corrected — processor fees, unsettled charges
+and any manual float all show up here, and a person decides what they mean.
+A second repeatable job sweeps every 5 minutes for payouts that are due
+(KYC just cleared, or the enqueue failed because Redis was down).
+
+Read it from the worker logs today; an admin endpoint is Phase 7.
 
 ### Security & Reliability
 
@@ -484,3 +492,189 @@ Access via logs or expose admin endpoint (TODO: Phase 7).
 - Batch venue payouts (currently queued) → Future optimization
 - Analytics and reporting → Phase 5
 
+---
+
+## Operations
+
+### Running with no Redis at all (`REDIS_ENABLED=false`)
+
+A stopgap for when the Redis provider is over quota or unavailable and the
+API still has to be deployable. It is not a steady state.
+
+```
+REDIS_ENABLED=false
+```
+
+With it set, nothing in the process opens a Redis socket: BullMQ is never
+constructed, the queue tokens resolve to no-op stubs, and `REDIS_CLIENT` is
+injected as `null`. What changes:
+
+| | `REDIS_ENABLED=true` (default) | `REDIS_ENABLED=false` |
+|---|---|---|
+| Webhook processing | Queued, handled by the worker | **Handled inline** on the request |
+| Payouts | Enqueued, then transferred by the worker | Committed as `QUEUED`; nothing transfers them |
+| Reconciliation / payout sweep | Repeatable jobs in the worker | Not scheduled |
+| `/health` | Includes a `redis` indicator | Omits it |
+| Worker service | Runs | Exits immediately with an explanatory log |
+
+The important part is the first row. Webhook events are stored and then
+processed on the request itself, so **payments still settle and the ledger is
+still written** — it just costs one Paystack verification round-trip before
+the webhook is acked. Payouts genuinely do not run in this mode: the
+obligations accumulate as `QUEUED` rows and the sweep picks them up once a
+worker is running again. Nothing is lost, only deferred.
+
+### Redis is a non-critical dependency
+
+The API starts, binds its port and serves traffic **even when Redis is
+unreachable**. This is deliberate: Redis backs queueing and caching, not the
+request path that accepts money, and an unbounded wait for it during startup
+is what causes a platform deploy to time out with "no open ports".
+
+What that means in practice:
+
+| Redis state | API behaviour |
+|---|---|
+| Available | Everything normal. `/health` reports `redis: up`. |
+| Unreachable at startup | App starts anyway (initial connect is bounded to 5s), logs a warning, and retries in the background. `/health` returns **200** with `redis: down`. |
+| Unreachable at runtime | Webhook acks and payout enqueues fail fast (2s cap) instead of hanging. Webhooks return non-2xx so Paystack retries; payouts stay `QUEUED` and the 5-minute sweep picks them up. |
+
+Nothing is lost while Redis is down — payments still settle through the
+status-poll path, and payout rows are committed before they are enqueued.
+
+### `REDIS_HOST` accepts a URL
+
+Managed providers hand out a connection URL rather than a bare hostname, so
+all of these work and are normalized to the host ioredis needs:
+
+```
+localhost
+famous-griffon-165164.upstash.io
+rediss://default:password@famous-griffon-165164.upstash.io:6379
+```
+
+A `rediss://` or `https://` scheme implies TLS. Otherwise TLS is assumed when
+a password is set (which is how the managed providers are configured). Set
+`REDIS_TLS=false` explicitly for a password-protected plain-TCP Redis.
+
+### Troubleshooting
+
+**`ERR max requests limit exceeded` in the logs.** The Redis provider's
+request quota is exhausted (Upstash free tier: 500,000/month). The app
+degrades rather than crashing, but queue processing stops until the quota
+resets or the plan is upgraded. Check the provider dashboard.
+
+**Deploy reports "no open ports".** The API binds before any dependency is
+confirmed, so this now points at something earlier than Redis: usually
+environment validation rejecting a variable at boot. The Joi schema prints
+exactly which one and why — read the first lines of the deploy log.
+
+**The process exits with an unhandled `ReplyError` and the platform reports
+"no open ports".** Fixed: `src/instrument.ts` installs an
+`unhandledRejection` handler, so a rejecting background dependency is logged
+and reported to Sentry rather than killing the process before `app.listen()`.
+If you see this on an older build, that is the cause.
+
+**`PAYSTACK_SECRET_KEY is required outside development/test`.** Startup
+validation refuses to run production or staging without Paystack credentials,
+because payment endpoints would otherwise accept requests and only fail at
+the provider call, and webhook signature verification would reject
+everything.
+
+**Health check returns 200 but `redis: down`.** Expected while Redis is
+unavailable — the API is healthy, queue-backed features are degraded. The
+`message` field carries the underlying reason.
+
+### Running the tests
+
+```bash
+# Unit tests (no database or Redis required; coverage threshold is 80%)
+npm test
+npm run test:cov
+
+# E2E tests (need Postgres and Redis running — docker compose up -d)
+npm run test:e2e
+```
+
+Unit tests pin `REDIS_HOST`/`REDIS_PASSWORD` to local defaults before any
+test file loads (`test/setup-unit-env.ts`). This matters: importing
+`@prisma/client` loads your `.env`, which otherwise pointed the test suite at
+**production** Redis and burned its request quota.
+
+---
+
+## Testing the Paystack flow without a frontend
+
+The guest frontend does not exist yet, so the API ships its own confirmation
+page. It is a development and pilot stand-in, not the real guest experience.
+
+### 1. Point the callback at the API itself
+
+```
+PAYMENT_CALLBACK_URL=https://<your-api-host>/payments/callback
+```
+
+`GET /payments/callback` is public, renders a self-contained HTML page, and —
+this is the point — **re-verifies with Paystack server-side** before showing
+anything. The redirect itself proves nothing; the page shows the status the
+server confirmed and settles the payment as a side effect. It reads both
+`reference` and Paystack's `trxref`, and tolerates either arriving twice.
+
+Set the same URL as the callback in the Paystack dashboard
+(**Settings → API Keys & Webhooks → Callback URL**) so payments started
+outside your own initialize call land somewhere useful too.
+
+### 2. Point the webhook at the API
+
+In the Paystack dashboard, **Settings → API Keys & Webhooks**:
+
+```
+Test Webhook URL:  https://<your-api-host>/webhooks/paystack
+Live Webhook URL:  https://<your-api-host>/webhooks/paystack
+```
+
+The endpoint verifies an HMAC-SHA512 signature against the raw request bytes
+using `PAYSTACK_SECRET_KEY`, so the test and live URLs must point at
+deployments configured with the matching key. An unsigned or mis-signed
+request is rejected with 401 and never stored.
+
+Paystack cannot reach `localhost`. For local testing, tunnel it:
+
+```bash
+npx localtunnel --port 3000        # or: ngrok http 3000
+# then use https://<tunnel-host>/webhooks/paystack in the dashboard
+```
+
+### 3. Walk the flow
+
+```bash
+API=https://<your-api-host>
+
+# 1. Scan a QR code (public) — returns a sessionId
+curl -s $API/t/<publicToken>
+
+# 2. Start a payment (public) — returns Paystack's checkout URL
+curl -s -X POST $API/payments/initialize \
+  -H 'Content-Type: application/json' \
+  -d '{"sessionId":"<sessionId>","amountKobo":50000,"email":"you@example.com"}'
+
+# 3. Open authorizationUrl in a browser and pay with a Paystack test card:
+#      success   4084 0840 8408 4081   CVV 408   PIN 0000   OTP 123456
+#      declined  5060 6666 6666 6666 66 CVV 123
+#    Paystack returns you to /payments/callback, which shows the verified status.
+
+# 4. Or check the status directly — this also settles a pending payment
+curl -s $API/payments/<reference>/status
+```
+
+A payment settles through **whichever of these happens first**: the webhook,
+the callback page, or a status poll. All three run the same verification, and
+the conditional claim in `PaymentSettlementService` means only one of them
+can ever post the ledger entries.
+
+### What you still need for a real pilot
+
+The callback page is deliberately minimal — no amount selection, no
+entertainer branding, no "show my name" toggle. Those belong in the guest
+frontend described in the PRD. This page exists so the money path can be
+exercised and audited before that frontend is built.

@@ -8,7 +8,9 @@ export class UserFactory {
   async create(overrides?: { email?: string; password?: string; role?: Role }) {
     const email = overrides?.email || faker.internet.email();
     const password = overrides?.password || 'Password123!';
-    const role = overrides?.role || 'USER';
+    // Role.PLATFORM_ADMIN, not a 'USER' literal: that value is not in the
+    // schema enum and made every created user fail at insert time.
+    const role: Role = overrides?.role ?? Role.PLATFORM_ADMIN;
 
     const passwordHash = await bcrypt.hash(password, 10);
 

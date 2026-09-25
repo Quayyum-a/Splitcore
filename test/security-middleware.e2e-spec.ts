@@ -126,5 +126,67 @@ describe('Security Middleware (e2e)', () => {
       // Should be rejected with 413 Payload Too Large
       expect(response.status).toBe(413);
     });
+
+    it('should describe an oversized payload without leaking parser internals', async () => {
+      const response = await request(app.getHttpServer())
+        .post('/auth/login')
+        .send({ data: 'x'.repeat(1100 * 1024) });
+
+      expect(response.body.statusCode).toBe(413);
+      expect(response.body.message).toBe('Request payload is too large');
+      expect(JSON.stringify(response.body)).not.toContain('entity.too.large');
+    });
+  });
+
+  // Regression guard. The strict 5/minute 'auth' limit used to be registered
+  // globally, so it applied to every route: the platform's own /health probe
+  // got 429 after five checks, and a club full of guests behind one NAT
+  // address could manage five QR scans a minute between them. The limit is
+  // now opt-in via @AuthRateLimit().
+  describe('Rate limiting scope', () => {
+    it('applies the strict limit to login', async () => {
+      const attempt = () =>
+        request(app.getHttpServer())
+          .post('/auth/login')
+          .send({ email: 'nobody@example.com', password: 'wrong-password-value' });
+
+      const statuses: number[] = [];
+      for (let i = 0; i < 8; i++) {
+        statuses.push((await attempt()).status);
+      }
+
+      expect(statuses).toContain(429);
+    });
+
+    it('never throttles the health endpoint', async () => {
+      const statuses: number[] = [];
+      for (let i = 0; i < 12; i++) {
+        statuses.push((await request(app.getHttpServer()).get('/health')).status);
+      }
+
+      expect(statuses.every((status) => status === 200)).toBe(true);
+    });
+
+    it('does not apply the strict login limit to public guest routes', async () => {
+      // An unknown token is a 404, not a 429: what matters is that the
+      // eighth guest in a minute still reaches the handler.
+      const statuses: number[] = [];
+      for (let i = 0; i < 8; i++) {
+        statuses.push((await request(app.getHttpServer()).get('/t/no-such-token')).status);
+      }
+
+      expect(statuses.every((status) => status === 404)).toBe(true);
+    });
+
+    it('does not apply the strict login limit to payment status polling', async () => {
+      const statuses: number[] = [];
+      for (let i = 0; i < 8; i++) {
+        statuses.push(
+          (await request(app.getHttpServer()).get('/payments/no-such-ref/status')).status,
+        );
+      }
+
+      expect(statuses.every((status) => status === 404)).toBe(true);
+    });
   });
 });

@@ -33,7 +33,6 @@
     "@nestjs/jwt": "^10.2.0",
     "@nestjs/passport": "^10.0.3",
     "@nestjs/platform-express": "^10.4.15",
-    "@nestjs/schedule": "^4.1.2",
     "@nestjs/swagger": "^8.0.7",
     "@nestjs/terminus": "^10.2.3",
     "@nestjs/throttler": "^6.2.1",
@@ -51,7 +50,6 @@
     "nestjs-pino": "^4.1.0",
     "passport": "^0.7.0",
     "passport-jwt": "^4.0.1",
-    "paystack-node": "^0.3.0",
     "pino-http": "^10.3.0",
     "pino-pretty": "^13.0.0",
     "reflect-metadata": "^0.2.2",
@@ -87,5 +85,8 @@
   },
   "prisma": {
     "seed": "ts-node prisma/seed.ts"
+  },
+  "engines": {
+    "node": ">=22 <23"
   }
 }

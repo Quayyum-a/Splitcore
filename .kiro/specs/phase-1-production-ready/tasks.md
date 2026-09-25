@@ -65,15 +65,15 @@ This implementation plan transforms the Splitcore backend from a working foundat
     - Update AuthController with @Throttle decorator for auth endpoints
     - _Requirements: 7.1, 7.2, 7.7_
 
-- [ ] 5. Configure CORS and security middleware
-  - [ ] 5.1 Create CORS configuration
+- [x] 5. Configure CORS and security middleware
+  - [x] 5.1 Create CORS configuration
     - Create src/config/cors.config.ts with getCorsOptions()
     - Define environment-specific allowed origins (development, test, production)
     - Configure credentials, methods, allowedHeaders
     - Set maxAge to 86400 (24 hours)
     - _Requirements: 7.4_
   
-  - [ ] 5.2 Update main.ts with security middleware
+  - [x] 5.2 Update main.ts with security middleware
     - Configure helmet with Content-Security-Policy, HSTS headers
     - Enable CORS with environment-specific configuration
     - Add payload size limits (1MB for json and urlencoded)
@@ -82,8 +82,8 @@ This implementation plan transforms the Splitcore backend from a working foundat
 
 ### Phase 4: Monitoring Integration
 
-- [ ] 6. Set up Sentry monitoring
-  - [ ] 6.1 Create Sentry initialization file
+- [x] 6. Set up Sentry monitoring
+  - [x] 6.1 Create Sentry initialization file
     - Create instrument.ts in project root
     - Initialize Sentry with DSN, environment, tracesSampleRate
     - Configure nodeProfilingIntegration and HTTP instrumentation
@@ -91,12 +91,12 @@ This implementation plan transforms the Splitcore backend from a working foundat
     - Configure ignoreErrors for expected exceptions (401, 403, 404)
     - _Requirements: 8.1, 8.2, 8.3, 8.6, 8.7, 8.8, 8.9, 8.11_
   
-  - [ ] 6.2 Update main.ts to import instrument.ts first
+  - [x] 6.2 Update main.ts to import instrument.ts first
     - Add `import '../instrument'` as first line in main.ts
     - Update package.json start:prod script with --import flag
     - _Requirements: 8.1_
   
-  - [ ] 6.3 Integrate Sentry into error handling
+  - [x] 6.3 Integrate Sentry into error handling
     - Update AllExceptionsFilter to capture exceptions in Sentry for 5xx errors
     - Add HTTP context (method, url, status_code) to error reports
     - Add user context (userId, role) when available
@@ -104,8 +104,8 @@ This implementation plan transforms the Splitcore backend from a working foundat
 
 ### Phase 5: Environment Management
 
-- [ ] 7. Enhance configuration validation
-  - [ ] 7.1 Update Joi validation schema
+- [x] 7. Enhance configuration validation
+  - [x] 7.1 Update Joi validation schema
     - Update src/config/validation.schema.ts with comprehensive validations
     - Add DATABASE_URL validation with PostgreSQL pattern matching
     - Add REDIS_HOST hostname validation
@@ -116,14 +116,14 @@ This implementation plan transforms the Splitcore backend from a working foundat
     - Add descriptive error messages for each validation
     - _Requirements: 9.1, 9.2, 9.3, 9.4, 9.5, 9.6, 9.7, 9.12_
   
-  - [ ] 7.2 Update configuration service
+  - [x] 7.2 Update configuration service
     - Update src/config/configuration.ts with sentry configuration
     - Add sentry.dsn and sentry.tracesSampleRate fields
     - Add redis.password optional field
     - Update AppConfig interface with new fields
     - _Requirements: 9.8, 9.9, 9.10, 9.11_
   
-  - [ ] 7.3 Create production environment example file
+  - [x] 7.3 Create production environment example file
     - Create .env.production.example with Supabase DATABASE_URL format
     - Include Upstash Redis configuration placeholders
     - Include Sentry DSN and sample rate configuration
@@ -132,12 +132,12 @@ This implementation plan transforms the Splitcore backend from a working foundat
 
 ### Phase 6: Database Connection Pooling
 
-- [ ] 8. Configure Prisma for production connection pooling
-  - [ ] 8.1 Update Prisma schema with metrics preview feature
+- [x] 8. Configure Prisma for production connection pooling
+  - [x] 8.1 Update Prisma schema with metrics preview feature
     - Add `previewFeatures = ["metrics"]` to generator block
     - _Requirements: 10.5_
   
-  - [ ] 8.2 Enhance PrismaService with connection pool configuration
+  - [x] 8.2 Enhance PrismaService with connection pool configuration
     - Update src/prisma/prisma.service.ts constructor
     - Add production-specific connection parameters (connection_limit, pool_timeout, connect_timeout)
     - Configure log levels based on environment
@@ -147,8 +147,8 @@ This implementation plan transforms the Splitcore backend from a working foundat
 
 ### Phase 7: API Documentation
 
-- [ ] 9. Set up Swagger/OpenAPI documentation
-  - [ ] 9.1 Create Swagger configuration module
+- [x] 9. Set up Swagger/OpenAPI documentation
+  - [x] 9.1 Create Swagger configuration module
     - Create src/common/swagger/swagger.config.ts
     - Configure DocumentBuilder with title, description, version
     - Add JWT Bearer authentication scheme
@@ -157,12 +157,12 @@ This implementation plan transforms the Splitcore backend from a working foundat
     - Export OpenAPI spec as openapi.json file
     - _Requirements: 6.1, 6.2, 6.6, 6.10_
   
-  - [ ] 9.2 Update main.ts to setup Swagger
+  - [x] 9.2 Update main.ts to setup Swagger
     - Import and call setupSwagger() after app creation
     - Mount Swagger UI at /api/docs endpoint
     - _Requirements: 6.6_
   
-  - [ ] 9.3 Add Swagger decorators to DTOs and controllers
+  - [x] 9.3 Add Swagger decorators to DTOs and controllers
     - Update LoginDto with @ApiProperty decorators
     - Create LoginResponseDto with @ApiProperty
     - Update AuthController with @ApiTags, @ApiOperation, @ApiResponse
@@ -172,8 +172,8 @@ This implementation plan transforms the Splitcore backend from a working foundat
 
 ### Phase 8: Queue Worker Process
 
-- [ ] 10. Create dedicated queue worker process
-  - [ ] 10.1 Create worker module and entry point
+- [x] 10. Create dedicated queue worker process
+  - [x] 10.1 Create worker module and entry point
     - Create src/worker/worker.module.ts importing necessary modules
     - Create src/worker.ts as application context entry point
     - Import instrument.ts first for Sentry initialization
@@ -181,14 +181,14 @@ This implementation plan transforms the Splitcore backend from a working foundat
     - Log worker startup with Redis connection details
     - _Requirements: 14.1, 14.2, 14.6, 14.7, 14.10_
   
-  - [ ] 10.2 Implement graceful shutdown handling
+  - [x] 10.2 Implement graceful shutdown handling
     - Register SIGTERM and SIGINT signal handlers
     - Wait maximum 30 seconds for job completion on shutdown
     - Close application context cleanly
     - Log shutdown events
     - _Requirements: 14.8, 14.9_
   
-  - [ ] 10.3 Enhance Redis service with retry logic
+  - [x] 10.3 Enhance Redis service with retry logic
     - Update src/redis/redis.service.ts with connection retry strategy
     - Configure 10 second connection timeout
     - Implement 5 second reconnection interval
@@ -198,7 +198,7 @@ This implementation plan transforms the Splitcore backend from a working foundat
     - Implement isReady() status check method
     - _Requirements: 14.3, 14.4, 14.5, 14.10_
   
-  - [ ] 10.4 Add worker npm scripts
+  - [x] 10.4 Add worker npm scripts
     - Add start:worker script for development (ts-node)
     - Add start:worker:dev script with nodemon
     - Add start:worker:prod script with instrument import
@@ -206,8 +206,8 @@ This implementation plan transforms the Splitcore backend from a working foundat
 
 ### Phase 9: Deployment Configuration
 
-- [ ] 11. Create Render deployment configuration
-  - [ ] 11.1 Create render.yaml blueprint
+- [x] 11. Create Render deployment configuration
+  - [x] 11.1 Create render.yaml blueprint
     - Define web service for API with health check endpoint
     - Define worker service for queue processing
     - Configure build commands (npm ci, prisma generate, npm run build)
@@ -216,7 +216,7 @@ This implementation plan transforms the Splitcore backend from a working foundat
     - Set region to oregon
     - _Requirements: 11.1, 11.2, 11.3, 11.4, 11.5, 11.11, 11.12, 11.13_
   
-  - [ ] 11.2 Configure environment variables in render.yaml
+  - [x] 11.2 Configure environment variables in render.yaml
     - Add DATABASE_URL as sync:false (set in dashboard)
     - Add REDIS_HOST, REDIS_PORT, REDIS_PASSWORD
     - Add JWT_SECRET with generateValue:true option
@@ -227,8 +227,8 @@ This implementation plan transforms the Splitcore backend from a working foundat
 
 ### Phase 10: Comprehensive Testing
 
-- [ ] 12. Write unit tests for authentication system
-  - [ ]* 12.1 Create auth.service.spec.ts
+- [x] 12. Write unit tests for authentication system
+  - [x]* 12.1 Create auth.service.spec.ts
     - Test validateUser() with valid credentials
     - Test validateUser() with incorrect password (expect 401)
     - Test validateUser() with non-existent email (expect 401)
@@ -238,7 +238,7 @@ This implementation plan transforms the Splitcore backend from a working foundat
     - Verify 80%+ code coverage for auth module
     - _Requirements: 2.1, 2.2, 2.3, 2.4, 2.10, 2.11, 2.12_
   
-  - [ ]* 12.2 Create jwt-auth.guard.spec.ts
+  - [x]* 12.2 Create jwt-auth.guard.spec.ts
     - Test canActivate() with valid JWT token
     - Test canActivate() with invalid JWT token (expect 401)
     - Test canActivate() with expired JWT token (expect 401)
@@ -246,14 +246,14 @@ This implementation plan transforms the Splitcore backend from a working foundat
     - Test user context extraction from token (userId, role)
     - _Requirements: 2.4, 2.5, 2.6, 2.7_
   
-  - [ ]* 12.3 Create roles.guard.spec.ts
+  - [x]* 12.3 Create roles.guard.spec.ts
     - Test canActivate() with matching role
     - Test canActivate() with mismatched role (expect 403)
     - Test canActivate() bypasses check when no @Roles() decorator present
     - _Requirements: 2.8, 2.9_
 
-- [ ] 13. Write unit tests for health check system
-  - [ ]* 13.1 Create health.controller.spec.ts
+- [x] 13. Write unit tests for health check system
+  - [x]* 13.1 Create health.controller.spec.ts
     - Test health endpoint returns 200 when database is available
     - Test health endpoint returns 503 when database is unavailable
     - Test health endpoint returns 200 when Redis is available
@@ -265,8 +265,8 @@ This implementation plan transforms the Splitcore backend from a working foundat
     - Verify 80%+ code coverage for health module
     - _Requirements: 3.1, 3.2, 3.3, 3.4, 3.5, 3.6, 3.7, 3.8, 3.9_
 
-- [ ] 14. Write unit tests for queue processing
-  - [ ]* 14.1 Create queue.service.spec.ts
+- [x] 14. Write unit tests for queue processing
+  - [x]* 14.1 Create queue.service.spec.ts
     - Test job enqueue successfully adds job to queue
     - Test job processing starts within 5 seconds
     - Test job completes within 30 seconds maximum
@@ -277,8 +277,8 @@ This implementation plan transforms the Splitcore backend from a working foundat
     - Verify 80%+ code coverage for queue module
     - _Requirements: 4.1, 4.2, 4.3, 4.4, 4.5, 4.6, 4.7, 4.8, 4.9_
 
-- [ ] 15. Write unit tests for error handling
-  - [ ]* 15.1 Create all-exceptions.filter.spec.ts
+- [x] 15. Write unit tests for error handling
+  - [x]* 15.1 Create all-exceptions.filter.spec.ts
     - Test filter returns 500 for unhandled exceptions
     - Test filter returns structured JSON error response
     - Test filter returns 400 with validation details
@@ -290,8 +290,8 @@ This implementation plan transforms the Splitcore backend from a working foundat
     - Verify 80%+ code coverage for error filters
     - _Requirements: 5.1, 5.2, 5.3, 5.4, 5.5, 5.6, 5.7, 5.8, 5.9_
 
-- [ ] 16. Write unit tests for configuration and parsing
-  - [ ]* 16.1 Create validation.schema.spec.ts
+- [x] 16. Write unit tests for configuration and parsing
+  - [x]* 16.1 Create validation.schema.spec.ts
     - Test schema rejects missing DATABASE_URL with exit code 1
     - Test schema rejects missing REDIS_HOST with exit code 1
     - Test schema rejects missing JWT_SECRET with exit code 1
@@ -302,7 +302,7 @@ This implementation plan transforms the Splitcore backend from a working foundat
     - Test schema outputs descriptive error messages
     - _Requirements: 16.2, 16.3, 16.4, 16.5, 16.6, 16.7, 16.8, 16.9, 16.10, 16.11, 16.12, 16.13_
   
-  - [ ]* 16.2 Create jwt parsing unit tests
+  - [x]* 16.2 Create jwt parsing unit tests
     - Test JWT parser extracts userId and role from valid token
     - Test JWT parser rejects malformed token with 401
     - Test JWT parser rejects invalid signature with 401
@@ -310,7 +310,7 @@ This implementation plan transforms the Splitcore backend from a working foundat
     - Test JWT round-trip property (generate then parse extracts original data)
     - _Requirements: 17.1, 17.2, 17.3, 17.4, 17.5, 17.6, 17.7_
   
-  - [ ]* 16.3 Create request validation unit tests
+  - [x]* 16.3 Create request validation unit tests
     - Test ValidationPipe rejects missing required fields with 400
     - Test ValidationPipe rejects incorrect field types with 400
     - Test ValidationPipe returns all validation errors in single response
@@ -321,8 +321,8 @@ This implementation plan transforms the Splitcore backend from a working foundat
     - Test validation completes within 5 seconds
     - _Requirements: 18.1, 18.2, 18.3, 18.4, 18.5, 18.6, 18.7, 18.8, 18.9_
 
-- [ ] 17. Write unit tests for logging sanitization
-  - [ ]* 17.1 Create logger redaction unit tests
+- [x] 17. Write unit tests for logging sanitization
+  - [x]* 17.1 Create logger redaction unit tests
     - Test Logger redacts "password" field (case-insensitive)
     - Test Logger redacts "passwordHash" field (case-insensitive)
     - Test Logger redacts "token" field (case-insensitive)
@@ -342,7 +342,7 @@ This implementation plan transforms the Splitcore backend from a working foundat
     - Test invalid query rejected with descriptive error
     - _Requirements: 15.1, 15.3, 15.4, 15.7_
 
-- [ ] 19. Checkpoint - Verify unit test coverage meets 80% threshold
+- [x] 19. Checkpoint - Verify unit test coverage meets 80% threshold
   - Run `npm run test:cov` to generate coverage report
   - Verify statement coverage >= 80%
   - Verify branch coverage >= 80%
@@ -351,8 +351,8 @@ This implementation plan transforms the Splitcore backend from a working foundat
   - Address any coverage gaps in critical modules
   - _Requirements: 20.1, 20.2, 20.3, 20.7, 20.8_
 
-- [ ] 20. Write E2E tests for authentication flows
-  - [ ]* 20.1 Create test/auth.e2e-spec.ts
+- [x] 20. Write E2E tests for authentication flows
+  - [x]* 20.1 Create test/auth.e2e-spec.ts
     - Test POST /auth/login with valid credentials returns 200 and token
     - Test POST /auth/login with invalid credentials returns 401
     - Test POST /auth/login enforces rate limiting (5 requests per 60 seconds)
@@ -362,8 +362,8 @@ This implementation plan transforms the Splitcore backend from a working foundat
     - Test protected endpoint access with expired token returns 401
     - _Requirements: 2.1, 2.2, 2.3, 2.4, 2.6, 7.2, 7.7_
 
-- [ ] 21. Write E2E tests for health check endpoints
-  - [ ]* 21.1 Create test/health.e2e-spec.ts
+- [x] 21. Write E2E tests for health check endpoints
+  - [x]* 21.1 Create test/health.e2e-spec.ts
     - Test GET /health returns 200 when all dependencies healthy
     - Test GET /health response includes database status "up"
     - Test GET /health response includes Redis status "up"
@@ -371,8 +371,8 @@ This implementation plan transforms the Splitcore backend from a working foundat
     - Test GET /health returns 503 when Redis is down
     - _Requirements: 3.1, 3.3, 3.5, 3.6_
 
-- [ ] 22. Write E2E tests for queue processing
-  - [ ]* 22.1 Create test/queue.e2e-spec.ts
+- [x] 22. Write E2E tests for queue processing
+  - [x]* 22.1 Create test/queue.e2e-spec.ts
     - Test job enqueue and successful processing
     - Test job completes within expected timeframe
     - Test failed job retries with configured delay
@@ -380,16 +380,16 @@ This implementation plan transforms the Splitcore backend from a working foundat
     - Test job data integrity throughout lifecycle
     - _Requirements: 4.1, 4.2, 4.4, 4.6, 4.8_
 
-- [ ] 23. Write E2E tests for security middleware
-  - [ ]* 23.1 Create test/security.e2e-spec.ts
+- [x] 23. Write E2E tests for security middleware
+  - [x]* 23.1 Create test/security.e2e-spec.ts
     - Test rate limiting returns 429 when limit exceeded
     - Test CORS rejects requests from unauthorized origins
     - Test payload size limit returns 413 when exceeded
     - Test security headers present in responses (helmet)
     - _Requirements: 7.3, 7.4, 7.6, 7.7, 7.8_
 
-- [ ] 24. Write E2E tests for error handling
-  - [ ]* 24.1 Create test/error-handling.e2e-spec.ts
+- [x] 24. Write E2E tests for error handling
+  - [x]* 24.1 Create test/error-handling.e2e-spec.ts
     - Test unhandled exception returns 500 with structured response
     - Test validation error returns 400 with field details
     - Test authentication error returns 401
@@ -398,7 +398,7 @@ This implementation plan transforms the Splitcore backend from a working foundat
     - Test error response structure matches specification
     - _Requirements: 5.1, 5.2, 5.3, 5.4, 5.5, 5.6, 5.7_
 
-- [ ] 25. Checkpoint - Run all tests and verify CI pipeline
+- [x] 25. Checkpoint - Run all tests and verify CI pipeline
   - Run `npm test` to execute all unit tests
   - Run `npm run test:e2e` to execute all E2E tests
   - Run `npm run test:cov` to verify final coverage >= 80%
@@ -409,21 +409,21 @@ This implementation plan transforms the Splitcore backend from a working foundat
 ### Phase 11: Documentation
 
 - [ ] 26. Write architecture documentation
-  - [ ] 26.1 Create system overview documentation
+  - [x] 26.1 Create system overview documentation
     - Create docs/architecture/001-system-overview.md
     - Document overall architecture with component diagram
     - Document deployment architecture
     - Document technology stack
     - _Requirements: 13.1, 13.2, 13.3_
   
-  - [ ] 26.2 Create module relationships documentation
+  - [x] 26.2 Create module relationships documentation
     - Create docs/architecture/002-module-architecture.md
     - Document module dependencies with diagram
     - Document module responsibilities
     - Document shared infrastructure (Prisma, Redis, Logger)
     - _Requirements: 13.1, 13.4_
   
-  - [ ] 26.3 Create authentication flow documentation
+  - [x] 26.3 Create authentication flow documentation
     - Create docs/architecture/003-authentication-flow.md
     - Document JWT token structure and validation
     - Create sequence diagram for authentication
@@ -467,7 +467,7 @@ This implementation plan transforms the Splitcore backend from a working foundat
     - _Requirements: 13.1, 13.10_
 
 - [ ] 27. Write deployment documentation
-  - [ ] 27.1 Create infrastructure setup guide
+  - [x] 27.1 Create infrastructure setup guide
     - Create docs/deployment/001-infrastructure-setup.md
     - Document Supabase database setup with step-by-step instructions
     - Include verification criteria for successful setup
@@ -476,7 +476,7 @@ This implementation plan transforms the Splitcore backend from a working foundat
     - Document Sentry project setup with step-by-step instructions
     - _Requirements: 12.1, 12.2, 12.3, 12.4, 12.5_
   
-  - [ ] 27.2 Create Render deployment guide
+  - [x] 27.2 Create Render deployment guide
     - Create docs/deployment/002-render-deployment.md
     - Document Render service creation process with step-by-step instructions
     - Document environment variable configuration for all required variables
@@ -501,7 +501,7 @@ This implementation plan transforms the Splitcore backend from a working foundat
     - Document rollback procedures
     - _Requirements: 12.10_
 
-- [ ] 28. Generate API documentation
+- [x] 28. Generate API documentation
   - Verify Swagger UI accessible at /api/docs
   - Verify OpenAPI spec exported as openapi.json
   - Test interactive API documentation with example requests
@@ -522,31 +522,31 @@ This implementation plan transforms the Splitcore backend from a working foundat
   - _Requirements: All_
 
 - [ ] 30. Final checkpoint - Production readiness checklist
-  - [ ] 30.1 Verify all tests passing (unit + E2E)
+  - [x] 30.1 Verify all tests passing (unit + E2E)
     - _Requirements: 20.4, 20.5_
   
-  - [ ] 30.2 Verify code coverage >= 80%
+  - [x] 30.2 Verify code coverage >= 80%
     - _Requirements: 20.1, 20.2, 20.3_
   
-  - [ ] 30.3 Verify security middleware configured (rate limiting, CORS, helmet)
+  - [x] 30.3 Verify security middleware configured (rate limiting, CORS, helmet)
     - _Requirements: 7.1, 7.4, 7.5_
   
-  - [ ] 30.4 Verify monitoring integrated (Sentry with error capture)
+  - [x] 30.4 Verify monitoring integrated (Sentry with error capture)
     - _Requirements: 8.1, 8.4_
   
-  - [ ] 30.5 Verify environment validation working
+  - [x] 30.5 Verify environment validation working
     - _Requirements: 9.1, 9.2, 9.3_
   
-  - [ ] 30.6 Verify database connection pooling configured
+  - [x] 30.6 Verify database connection pooling configured
     - _Requirements: 10.1, 10.2_
   
-  - [ ] 30.7 Verify API documentation generated and accessible
+  - [x] 30.7 Verify API documentation generated and accessible
     - _Requirements: 6.1, 6.6_
   
-  - [ ] 30.8 Verify worker process configured with graceful shutdown
+  - [x] 30.8 Verify worker process configured with graceful shutdown
     - _Requirements: 14.8, 14.9_
   
-  - [ ] 30.9 Verify deployment configuration complete (render.yaml)
+  - [x] 30.9 Verify deployment configuration complete (render.yaml)
     - _Requirements: 11.1, 11.2_
   
   - [ ] 30.10 Verify architecture documentation complete

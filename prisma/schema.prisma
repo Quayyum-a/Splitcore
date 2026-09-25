@@ -159,7 +159,8 @@ model SplitRule {
   createdAt      DateTime  @default(now()) @map("created_at")
   updatedAt      DateTime  @updatedAt @map("updated_at")
 
-  venue Venue @relation(fields: [venueId], references: [id])
+  venue               Venue                @relation(fields: [venueId], references: [id])
+  paymentTransactions PaymentTransaction[]
 
   @@index([venueId, effectiveFrom])
   @@map("split_rules")
@@ -175,6 +176,11 @@ model PaymentTransaction {
   grossAmountKobo    Int           @map("gross_amount_kobo")
   guestDisplayName   String?       @map("guest_display_name")
   displayNameEnabled Boolean       @default(false) @map("display_name_enabled")
+  // Split rule the guest was quoted under, snapshotted at initialization.
+  // Settlement divides the money by THIS rule, never by whatever rule is
+  // active when the webhook lands, so a venue editing its split mid-payment
+  // can't change how an already-accepted payment is divided.
+  splitRuleId        String?       @map("split_rule_id")
   status             PaymentStatus @default(CREATED)
   createdAt          DateTime      @default(now()) @map("created_at")
   updatedAt          DateTime      @updatedAt @map("updated_at")
@@ -182,6 +188,7 @@ model PaymentTransaction {
   venue         Venue          @relation(fields: [venueId], references: [id])
   entertainer   Entertainer?   @relation(fields: [entertainerId], references: [id])
   guestSession  GuestSession   @relation(fields: [guestSessionId], references: [id])
+  splitRule     SplitRule?     @relation(fields: [splitRuleId], references: [id], onDelete: Restrict)
   ledgerEntries LedgerEntry[]
   payouts       Payout[]
 
@@ -202,6 +209,9 @@ model LedgerAccount {
   entries LedgerEntry[]
   payouts Payout[]
 
+  // Owner-scoped accounts are unique via this index. System accounts
+  // (owner_id NULL) are unique via a partial index in raw SQL, because
+  // Postgres treats NULLs as distinct in a plain unique index.
   @@unique([type, ownerId])
   @@index([type])
   @@index([ownerId])
@@ -260,18 +270,23 @@ model Payout {
   recipientCode     String?      @map("recipient_code") // Paystack recipient code
   amountKobo        Int          @map("amount_kobo")
   status            PayoutStatus @default(QUEUED)
+  // Each transfer attempt gets its own reference (po_<id>_<attempt>), so a
+  // retry after a definitive failure never collides with the old transfer,
+  // while a retry after an ambiguous failure re-verifies the same reference.
+  attempts          Int          @default(0)
   attemptedAt       DateTime?    @map("attempted_at")
   completedAt       DateTime?    @map("completed_at")
   failureReason     String?      @map("failure_reason")
   createdAt         DateTime     @default(now()) @map("created_at")
   updatedAt         DateTime     @updatedAt @map("updated_at")
 
-  ledgerAccount   LedgerAccount      @relation(fields: [ledgerAccountId], references: [id])
+  ledgerAccount      LedgerAccount      @relation(fields: [ledgerAccountId], references: [id])
   paymentTransaction PaymentTransaction @relation(fields: [transactionId], references: [id])
 
-  @@index([ledgerAccountId])
+  // One payout obligation per recipient account per payment. Retries reuse
+  // the row; they never create a second obligation.
+  @@unique([ledgerAccountId, transactionId])
   @@index([transactionId])
-  @@index([transferReference])
   @@index([status])
   @@map("payouts")
 }

@@ -1,19 +1,38 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Inject, Injectable, Logger, NotFoundException, ConflictException } from '@nestjs/common';
+import { InjectQueue } from '@nestjs/bullmq';
+import { Queue } from 'bullmq';
+import { Payout, PayoutStatus } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
-import { PaystackPayoutProvider } from '../payments/providers/paystack-payout.provider';
-import { LedgerAccountType } from '@prisma/client';
-import { nanoid } from 'nanoid';
+import { LedgerService } from '../ledger/ledger.service';
+import { LedgerRepository } from '../ledger/ledger.repository';
+import { PAYOUT_PROVIDER, PayoutProvider } from '../payments/interfaces';
+import { PayoutJobData, payoutJobOptions } from '../payments/payment-settlement.service';
+import { PAYOUTS_QUEUE } from '../queue/queue.module';
+import { resolveBankCode } from './bank-codes';
+
+/** Automatic re-attempts after the bank rejects/reverses a transfer. */
+export const MAX_AUTOMATIC_TRANSFER_ATTEMPTS = 3;
+
+/** A PROCESSING payout untouched this long gets re-verified by the sweep. */
+const STALE_PROCESSING_MS = 15 * 60 * 1000;
+
+const OPEN_STATUSES: PayoutStatus[] = ['QUEUED', 'RETRYING', 'PROCESSING'];
 
 /**
- * Payouts Service
+ * Payouts: moving what the ledger says is owed out to the owner's bank.
  *
- * Handles payout creation and processing with these guarantees:
- * 1. Idempotency (same ledger entry won't trigger duplicate payouts)
- * 2. KYC gating (only VERIFIED entertainers get payouts)
- * 3. Balance preservation (failed payouts don't lose the liability)
- * 4. Retry support (transient failures can be retried)
- *
- * DESIGN NOTE: Per-tip instant payouts keep transfers <₦10k, avoiding ₦50 stamp duty
+ * Guarantees:
+ * - Idempotent. The transfer reference is persisted BEFORE the provider is
+ *   called, and any existing reference is verified with the provider before
+ *   a new attempt starts, so a crash, timeout or retried job can't transfer
+ *   the same obligation twice.
+ * - The ledger is debited only when the provider confirms delivery. A
+ *   failed payout posts nothing, so the payable balance stays exactly as it
+ *   was: the liability is never dropped because a transfer bounced.
+ * - KYC-gated. Entertainers who aren't VERIFIED keep QUEUED payouts (their
+ *   balance still accrues) until the sweep finds them verified.
+ * - Per-tip, immediate transfers. Most tips are under ₦10,000, so most
+ *   transfers avoid the ₦50 stamp duty; batching would lose that.
  */
 @Injectable()
 export class PayoutsService {
@@ -21,362 +40,313 @@ export class PayoutsService {
 
   constructor(
     private readonly prisma: PrismaService,
-    private readonly paystackPayoutProvider: PaystackPayoutProvider,
+    private readonly ledger: LedgerService,
+    private readonly ledgerRepository: LedgerRepository,
+    @Inject(PAYOUT_PROVIDER) private readonly payoutProvider: PayoutProvider,
+    @InjectQueue(PAYOUTS_QUEUE) private readonly payoutsQueue: Queue<PayoutJobData>,
   ) {}
 
-  /**
-   * Create and process payouts for a successful payment
-   *
-   * Called after ledger entries are written.
-   * Creates payout records for entertainer and venue payable accounts.
-   *
-   * CRITICAL: Only pay out to VERIFIED entertainers (KYC gate)
-   * Ledger entries still exist for unverified - money is accounted for, just not transferred
-   */
-  async createPayoutsForTransaction(transactionId: string): Promise<void> {
-    const transaction = await this.prisma.paymentTransaction.findUnique({
-      where: { id: transactionId },
-      include: {
-        ledgerEntries: {
-          include: {
-            account: true,
-          },
-        },
-        entertainer: true,
-        venue: true,
-      },
+  /** Worker entry point; safe to call any number of times for one payout. */
+  async processPayout(payoutId: string): Promise<void> {
+    const payout = await this.prisma.payout.findUnique({
+      where: { id: payoutId },
+      include: { ledgerAccount: true },
     });
 
-    if (!transaction) {
-      this.logger.error('Transaction not found', { transactionId });
+    if (!payout) {
+      this.logger.warn('Payout not found', { payoutId });
       return;
     }
-
-    // Find all payable ledger entries (ENTERTAINER_PAYABLE, VENUE_PAYABLE)
-    // These represent money owed to venues and entertainers
-    const payableEntries = transaction.ledgerEntries.filter(
-      (entry) =>
-        entry.direction === 'CREDIT' &&
-        (entry.account.type === 'ENTERTAINER_PAYABLE' || entry.account.type === 'VENUE_PAYABLE'),
-    );
-
-    this.logger.log('Creating payouts for transaction', {
-      transactionId,
-      payableEntriesCount: payableEntries.length,
-    });
-
-    for (const entry of payableEntries) {
-      // Check if payout already exists for this ledger account + transaction (idempotency)
-      const existingPayout = await this.prisma.payout.findFirst({
-        where: {
-          ledgerAccountId: entry.accountId,
-          transactionId,
-        },
-      });
-
-      if (existingPayout) {
-        this.logger.log('Payout already exists (idempotency)', {
-          payoutId: existingPayout.id,
-          ledgerAccountId: entry.accountId,
-          transactionId,
-        });
-        continue;
-      }
-
-      // For entertainer payouts, check KYC status
-      if (entry.account.type === 'ENTERTAINER_PAYABLE') {
-        const entertainer = await this.prisma.entertainer.findUnique({
-          where: { id: entry.account.ownerId! },
-        });
-
-        if (!entertainer) {
-          this.logger.error('Entertainer not found for ledger account', {
-            ledgerAccountId: entry.accountId,
-            ownerId: entry.account.ownerId,
-          });
-          continue;
-        }
-
-        if (entertainer.kycStatus !== 'VERIFIED') {
-          this.logger.log('Entertainer not KYC verified - payout queued but not processed', {
-            entertainerId: entertainer.id,
-            kycStatus: entertainer.kycStatus,
-            amountKobo: entry.amountKobo,
-          });
-
-          // Create payout in QUEUED status - will be processed when KYC completes
-          await this.prisma.payout.create({
-            data: {
-              ledgerAccountId: entry.accountId,
-              transactionId,
-              amountKobo: entry.amountKobo,
-              status: 'QUEUED', // Waiting for KYC
-            },
-          });
-
-          continue;
-        }
-
-        // KYC verified - process payout
-        await this.processEntertainerPayout(entry.accountId, transactionId, entry.amountKobo);
-      } else if (entry.account.type === 'VENUE_PAYABLE') {
-        // Venues don't have KYC requirement (business accounts, pre-verified)
-        await this.processVenuePayout(entry.accountId, transactionId, entry.amountKobo);
-      }
+    if (!OPEN_STATUSES.includes(payout.status)) {
+      return; // SUCCESS/CANCELLED are final; FAILED waits for manual retry
     }
-  }
 
-  /**
-   * Process entertainer payout
-   * Creates recipient (if needed) and initiates transfer
-   */
-  private async processEntertainerPayout(
-    ledgerAccountId: string,
-    transactionId: string,
-    amountKobo: number,
-  ): Promise<void> {
-    const account = await this.prisma.ledgerAccount.findUnique({
-      where: { id: ledgerAccountId },
-    });
+    // An earlier attempt may have reached the provider. Never start a new
+    // transfer until we know that one didn't (and won't) pay out.
+    if (payout.transferReference) {
+      const previous = await this.payoutProvider.verifyTransfer(payout.transferReference);
+      if (previous.status === 'success') {
+        await this.markSucceeded(payout.id, payout.transferReference);
+        return;
+      }
+      if (previous.status === 'pending') {
+        return; // transfer.* webhook or the sweep resolves it
+      }
+      // failed | reversed | not_found: that attempt moved no money.
+    }
 
-    if (!account || !account.ownerId) {
-      this.logger.error('Invalid ledger account', { ledgerAccountId });
+    if (payout.ledgerAccount.type !== 'ENTERTAINER_PAYABLE') {
+      // Venues have no payout destination modelled yet; the obligation stays
+      // QUEUED and the venue's payable balance keeps accruing.
+      this.logger.log('Venue payouts not enabled; payout stays queued', { payoutId });
       return;
     }
 
     const entertainer = await this.prisma.entertainer.findUnique({
-      where: { id: account.ownerId },
+      where: { id: payout.ledgerAccount.ownerId! },
     });
-
     if (!entertainer) {
-      this.logger.error('Entertainer not found', { entertainerId: account.ownerId });
+      await this.markForReview(payout, 'Entertainer for payable account not found');
       return;
     }
 
-    // Validate bank details exist
-    if (!entertainer.bankName || !entertainer.accountNumber) {
-      this.logger.error('Entertainer missing bank details', {
-        entertainerId: entertainer.id,
-      });
-
-      // Create payout in FAILED status with reason
-      await this.prisma.payout.create({
-        data: {
-          ledgerAccountId,
-          transactionId,
-          amountKobo,
-          status: 'FAILED',
-          failureReason: 'Missing bank account details',
-          attemptedAt: new Date(),
-        },
-      });
-
-      return;
-    }
-
-    try {
-      // Generate unique transfer reference
-      const transferReference = `txf_${nanoid(21)}`;
-
-      // Create recipient with Paystack (or reuse if exists)
-      // TODO: Cache recipient codes to avoid creating duplicates
-      const recipient = await this.paystackPayoutProvider.createRecipient({
-        type: 'nuban',
-        name: entertainer.legalName,
-        accountNumber: entertainer.accountNumber,
-        bankCode: this.getBankCode(entertainer.bankName), // Helper to map bank names to codes
-        currency: 'NGN',
-        metadata: {
-          entertainerId: entertainer.id,
-          stageName: entertainer.stageName,
-        },
-      });
-
-      // Create payout record in PROCESSING status
-      const payout = await this.prisma.payout.create({
-        data: {
-          ledgerAccountId,
-          transactionId,
-          transferReference,
-          recipientCode: recipient.recipientCode,
-          amountKobo,
-          status: 'PROCESSING',
-          attemptedAt: new Date(),
-        },
-      });
-
-      // Initiate transfer with Paystack
-      const transfer = await this.paystackPayoutProvider.initiateTransfer({
-        amountKobo,
-        recipientCode: recipient.recipientCode,
-        reference: transferReference,
-        reason: `Tip payout - ${entertainer.stageName}`,
-        currency: 'NGN',
-        metadata: {
-          payoutId: payout.id,
-          entertainerId: entertainer.id,
-          transactionId,
-        },
-      });
-
-      this.logger.log('Payout initiated', {
-        payoutId: payout.id,
-        transferReference,
-        amountKobo,
-        entertainerName: entertainer.stageName,
-        transferStatus: transfer.status,
-      });
-
-      // Update payout status based on transfer result
-      if (transfer.status === 'success') {
-        await this.prisma.payout.update({
-          where: { id: payout.id },
-          data: {
-            status: 'SUCCESS',
-            completedAt: new Date(),
-          },
-        });
-      } else if (transfer.status === 'failed') {
-        await this.prisma.payout.update({
-          where: { id: payout.id },
-          data: {
-            status: 'FAILED',
-            failureReason: transfer.failureReason,
-          },
+    if (entertainer.kycStatus !== 'VERIFIED') {
+      if (payout.status !== 'QUEUED') {
+        await this.prisma.payout.updateMany({
+          where: { id: payout.id, status: payout.status },
+          data: { status: 'QUEUED' },
         });
       }
-      // If 'pending', webhook will update status later
-    } catch (error) {
-      this.logger.error('Failed to process entertainer payout', {
-        ledgerAccountId,
+      this.logger.log('Payout held: entertainer not KYC verified', {
+        payoutId,
         entertainerId: entertainer.id,
-        error: error instanceof Error ? error.message : String(error),
+        kycStatus: entertainer.kycStatus,
       });
-
-      // Create payout in FAILED status
-      await this.prisma.payout.create({
-        data: {
-          ledgerAccountId,
-          transactionId,
-          amountKobo,
-          status: 'FAILED',
-          failureReason: error instanceof Error ? error.message : 'Unknown error',
-          attemptedAt: new Date(),
-        },
-      });
+      return;
     }
-  }
 
-  /**
-   * Process venue payout
-   * Similar to entertainer payout but no KYC check
-   */
-  private async processVenuePayout(
-    ledgerAccountId: string,
-    transactionId: string,
-    amountKobo: number,
-  ): Promise<void> {
-    // TODO: Implement venue payout logic
-    // For now, just create a QUEUED payout
-    // Venues might have different payout schedule (batch daily vs instant)
-    await this.prisma.payout.create({
+    if (!entertainer.bankName || !entertainer.accountNumber) {
+      await this.markForReview(payout, 'Missing bank account details');
+      return;
+    }
+    const bankCode = resolveBankCode(entertainer.bankName);
+    if (!bankCode) {
+      await this.markForReview(payout, `Unknown bank: ${entertainer.bankName}`);
+      return;
+    }
+
+    // Claim the attempt and persist its reference before touching the
+    // provider. The attempts guard means a concurrent worker loses the race.
+    const attempt = payout.attempts + 1;
+    const transferReference = `po_${payout.id.replace(/-/g, '')}_${attempt}`;
+    const claim = await this.prisma.payout.updateMany({
+      where: { id: payout.id, status: { in: OPEN_STATUSES }, attempts: payout.attempts },
       data: {
-        ledgerAccountId,
-        transactionId,
-        amountKobo,
-        status: 'QUEUED', // Batch processing later
+        status: 'PROCESSING',
+        attempts: attempt,
+        transferReference,
+        attemptedAt: new Date(),
+        failureReason: null,
       },
     });
-
-    this.logger.log('Venue payout queued', {
-      ledgerAccountId,
-      transactionId,
-      amountKobo,
-    });
-  }
-
-  /**
-   * Helper: Map bank name to Paystack bank code
-   * TODO: Maintain comprehensive mapping of Nigerian banks
-   */
-  private getBankCode(bankName: string): string {
-    const bankCodes: Record<string, string> = {
-      GTBank: '058',
-      'Access Bank': '044',
-      'First Bank': '011',
-      UBA: '033',
-      'Zenith Bank': '057',
-      'Stanbic IBTC': '221',
-      'Sterling Bank': '232',
-      'Polaris Bank': '076',
-      'Wema Bank': '035',
-      'Union Bank': '032',
-      Ecobank: '050',
-      'Fidelity Bank': '070',
-      FCMB: '214',
-      'Kuda Bank': '090267',
-      Opay: '999992',
-      // Add more as needed
-    };
-
-    const code = bankCodes[bankName];
-    if (!code) {
-      this.logger.warn('Unknown bank name', { bankName });
-      throw new Error(`Unknown bank: ${bankName}`);
+    if (claim.count === 0) {
+      return;
     }
 
-    return code;
+    // From here, any thrown error leaves the payout PROCESSING with this
+    // reference; the retry verifies it first (see above).
+    const recipient = await this.payoutProvider.createRecipient({
+      type: 'nuban',
+      name: entertainer.legalName,
+      accountNumber: entertainer.accountNumber,
+      bankCode,
+      currency: 'NGN',
+      metadata: { entertainerId: entertainer.id },
+    });
+    await this.prisma.payout.update({
+      where: { id: payout.id },
+      data: { recipientCode: recipient.recipientCode },
+    });
+
+    const transfer = await this.payoutProvider.initiateTransfer({
+      amountKobo: payout.amountKobo,
+      recipientCode: recipient.recipientCode,
+      reference: transferReference,
+      reason: `Splitcore tip payout - ${entertainer.stageName}`,
+      currency: 'NGN',
+      metadata: { payoutId: payout.id, transactionId: payout.transactionId },
+    });
+
+    this.logger.log('Transfer initiated', {
+      payoutId,
+      transferReference,
+      attempt,
+      amountKobo: payout.amountKobo,
+      transferStatus: transfer.status,
+    });
+
+    if (transfer.status === 'success') {
+      await this.markSucceeded(payout.id, transferReference);
+    } else if (transfer.status === 'failed' || transfer.status === 'reversed') {
+      await this.handleTransferEvent(transferReference, 'failed', transfer.failureReason);
+    }
+    // 'pending': the transfer.* webhook finishes it.
   }
 
-  /**
-   * Update payout status from webhook
-   * Called when transfer.success or transfer.failed webhook arrives
-   */
-  async updatePayoutFromWebhook(
+  /** transfer.success / transfer.failed / transfer.reversed from the provider. */
+  async handleTransferEvent(
     transferReference: string,
-    status: 'success' | 'failed' | 'reversed',
-    failureReason?: string,
+    outcome: 'success' | 'failed' | 'reversed',
+    reason?: string,
   ): Promise<void> {
     const payout = await this.prisma.payout.findUnique({
       where: { transferReference },
+      include: { ledgerAccount: true },
     });
-
     if (!payout) {
-      this.logger.warn('Payout not found for transfer reference', { transferReference });
+      this.logger.warn('No payout for transfer reference', { transferReference });
       return;
     }
 
-    if (status === 'success') {
-      await this.prisma.payout.update({
-        where: { id: payout.id },
-        data: {
-          status: 'SUCCESS',
-          completedAt: new Date(),
-        },
-      });
-
-      this.logger.log('Payout marked as SUCCESS from webhook', {
-        payoutId: payout.id,
-        transferReference,
-      });
-    } else if (status === 'failed' || status === 'reversed') {
-      await this.prisma.payout.update({
-        where: { id: payout.id },
-        data: {
-          status: 'FAILED',
-          failureReason,
-        },
-      });
-
-      this.logger.log('Payout marked as FAILED from webhook', {
-        payoutId: payout.id,
-        transferReference,
-        failureReason,
-      });
-
-      // CRITICAL: Balance is preserved - ledger entry still exists
-      // The entertainer's payable account balance reflects what's owed
-      // Manual review or retry can be triggered later
+    if (outcome === 'success') {
+      await this.markSucceeded(payout.id, transferReference);
+      return;
     }
+
+    if (outcome === 'reversed' && payout.status === 'SUCCESS') {
+      // Money came back after we'd recorded it as paid: put the obligation
+      // back on the payable account with compensating entries.
+      const entries = this.ledger.computePayoutReversalEntries({
+        accountType: payout.ledgerAccount.type,
+        ownerId: payout.ledgerAccount.ownerId,
+        amountKobo: payout.amountKobo,
+      });
+      const reversed = await this.prisma.$transaction(async (tx) => {
+        const claim = await tx.payout.updateMany({
+          where: { id: payout.id, status: 'SUCCESS', transferReference },
+          data: { status: 'RETRYING', completedAt: null, failureReason: reason ?? 'Reversed' },
+        });
+        if (claim.count === 0) return false;
+        await this.ledgerRepository.post(tx, payout.transactionId, entries);
+        return true;
+      });
+      if (!reversed) return;
+      this.logger.warn('Payout reversed after success; balance restored', {
+        payoutId: payout.id,
+        transferReference,
+      });
+    } else if (payout.status !== 'SUCCESS') {
+      // Nothing was posted for this attempt, so the payable balance is
+      // already intact. Only the payout's state changes.
+      await this.prisma.payout.updateMany({
+        where: { id: payout.id, transferReference, status: { not: 'SUCCESS' } },
+        data: { status: 'RETRYING', failureReason: reason ?? `Transfer ${outcome}` },
+      });
+    } else {
+      return; // a late 'failed' for an attempt already confirmed successful
+    }
+
+    if (payout.attempts >= MAX_AUTOMATIC_TRANSFER_ATTEMPTS) {
+      await this.markForReview(
+        payout,
+        `Transfer ${outcome} after ${payout.attempts} attempts: ${reason ?? 'no reason given'}`,
+      );
+      return;
+    }
+    await this.enqueue(payout.id, 60_000);
+  }
+
+  /**
+   * Manual-review exit: re-open a FAILED payout (e.g. after bank details
+   * were corrected). The balance was never removed, so there's nothing to
+   * restore; the payout just gets another attempt.
+   */
+  async retryPayout(payoutId: string): Promise<Payout> {
+    const claim = await this.prisma.payout.updateMany({
+      where: { id: payoutId, status: 'FAILED' },
+      data: { status: 'RETRYING', failureReason: null },
+    });
+    if (claim.count === 0) {
+      const exists = await this.prisma.payout.findUnique({ where: { id: payoutId } });
+      if (!exists) throw new NotFoundException('Payout not found');
+      throw new ConflictException(`Payout is ${exists.status}; only FAILED payouts can be retried`);
+    }
+    await this.enqueue(payoutId);
+    return this.prisma.payout.findUniqueOrThrow({ where: { id: payoutId } });
+  }
+
+  /**
+   * Periodic sweep (worker, via BullMQ repeatable job). Enqueues:
+   * - QUEUED/RETRYING entertainer payouts whose owner is now KYC VERIFIED
+   *   (this is how a payout held for KYC is released)
+   * - payouts whose enqueue failed at settlement time (Redis was down)
+   * - PROCESSING payouts that have gone quiet, to re-verify with the provider
+   */
+  async enqueueDuePayouts(): Promise<number> {
+    const candidates = await this.prisma.payout.findMany({
+      where: {
+        ledgerAccount: { type: 'ENTERTAINER_PAYABLE' },
+        OR: [
+          { status: { in: ['QUEUED', 'RETRYING'] } },
+          { status: 'PROCESSING', updatedAt: { lt: new Date(Date.now() - STALE_PROCESSING_MS) } },
+        ],
+      },
+      select: { id: true, ledgerAccount: { select: { ownerId: true } } },
+      take: 500,
+    });
+
+    const ownerIds = [...new Set(candidates.map((p) => p.ledgerAccount.ownerId!))];
+    const verified = new Set(
+      (
+        await this.prisma.entertainer.findMany({
+          where: { id: { in: ownerIds }, kycStatus: 'VERIFIED' },
+          select: { id: true },
+        })
+      ).map((e) => e.id),
+    );
+
+    const due = candidates.filter((p) => verified.has(p.ledgerAccount.ownerId!));
+    for (const payout of due) {
+      await this.enqueue(payout.id);
+    }
+    if (due.length > 0) {
+      this.logger.log('Payout sweep enqueued payouts', { count: due.length });
+    }
+    return due.length;
+  }
+
+  /**
+   * Record confirmed delivery: SUCCESS + ledger debit of the payable
+   * account, atomically. The conditional update makes this exactly-once
+   * even if the webhook and a verify race each other.
+   */
+  private async markSucceeded(payoutId: string, transferReference: string): Promise<void> {
+    const payout = await this.prisma.payout.findUniqueOrThrow({
+      where: { id: payoutId },
+      include: { ledgerAccount: true },
+    });
+    const entries = this.ledger.computePayoutEntries({
+      accountType: payout.ledgerAccount.type,
+      ownerId: payout.ledgerAccount.ownerId,
+      amountKobo: payout.amountKobo,
+    });
+
+    const posted = await this.prisma.$transaction(async (tx) => {
+      const claim = await tx.payout.updateMany({
+        where: { id: payoutId, transferReference, status: { not: 'SUCCESS' } },
+        data: { status: 'SUCCESS', completedAt: new Date(), failureReason: null },
+      });
+      if (claim.count === 0) return false;
+      await this.ledgerRepository.post(tx, payout.transactionId, entries);
+      return true;
+    });
+
+    if (posted) {
+      this.logger.log('Payout succeeded', {
+        payoutId,
+        transferReference,
+        amountKobo: payout.amountKobo,
+      });
+    }
+  }
+
+  /** Terminal until a human calls retryPayout. The balance stays owed. */
+  private async markForReview(payout: Payout, reason: string): Promise<void> {
+    await this.prisma.payout.updateMany({
+      where: { id: payout.id, status: { not: 'SUCCESS' } },
+      data: { status: 'FAILED', failureReason: `MANUAL_REVIEW: ${reason}` },
+    });
+    this.logger.error('Payout needs manual review; payable balance retained', {
+      payoutId: payout.id,
+      reason,
+    });
+  }
+
+  private async enqueue(payoutId: string, delay = 0): Promise<void> {
+    await this.payoutsQueue.add(
+      'process-payout',
+      { payoutId },
+      { ...payoutJobOptions(payoutId), delay },
+    );
   }
 }

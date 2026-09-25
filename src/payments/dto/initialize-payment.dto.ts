@@ -1,4 +1,14 @@
-import { IsInt, IsOptional, IsString, IsUUID, IsBoolean, Min, Max } from 'class-validator';
+import {
+  IsInt,
+  IsOptional,
+  IsString,
+  IsUUID,
+  IsBoolean,
+  IsEmail,
+  Min,
+  Max,
+  MaxLength,
+} from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
 /**
@@ -32,6 +42,7 @@ export class InitializePaymentDto {
   })
   @IsOptional()
   @IsString()
+  @MaxLength(60)
   guestDisplayName?: string;
 
   @ApiPropertyOptional({
@@ -48,6 +59,6 @@ export class InitializePaymentDto {
     example: 'guest@example.com',
   })
   @IsOptional()
-  @IsString()
+  @IsEmail()
   email?: string;
 }

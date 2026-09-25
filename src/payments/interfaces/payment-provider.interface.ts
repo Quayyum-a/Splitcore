@@ -72,6 +72,18 @@ export interface PaymentVerification {
   /**
    * Provider's transaction reference
    */
+  /**
+   * ISO currency code as reported by the provider (e.g. "NGN").
+   * Settlement rejects anything that isn't what we charged in.
+   */
+  currency?: string;
+
+  /**
+   * Processing fee the provider deducted, in kobo (informational; see
+   * reconciliation notes on how fees surface as drift).
+   */
+  feesKobo?: number;
+
   providerReference?: string;
 
   /**
@@ -91,7 +103,16 @@ export interface PaymentVerification {
  * All payment processors must implement this interface.
  * First implementation: PaystackProvider
  */
+/**
+ * DI token for the active PaymentProvider. Domain code injects this token,
+ * never a concrete provider class.
+ */
+export const PAYMENT_PROVIDER = Symbol('PAYMENT_PROVIDER');
+
 export interface PaymentProvider {
+  /** Stable identifier stored on PaymentTransaction.provider (e.g. "paystack"). */
+  readonly name: string;
+
   /**
    * Initialize a payment and get checkout URL
    * Guest will be redirected to this URL to complete payment

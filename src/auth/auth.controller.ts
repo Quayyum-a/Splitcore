@@ -1,9 +1,9 @@
 import { Body, Controller, HttpCode, HttpStatus, Post } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse, ApiBody } from '@nestjs/swagger';
-import { Throttle } from '@nestjs/throttler';
 import { AuthService } from './auth.service';
 import { LoginDto } from './dto/login.dto';
 import { Public } from '../common/decorators/public.decorator';
+import { AuthRateLimit } from '../common/throttler/auth-rate-limit.decorator';
 
 @ApiTags('auth')
 @Controller('auth')
@@ -17,7 +17,8 @@ export class AuthController {
   // accounts that control payout configuration.
   @Post('login')
   @Public()
-  @Throttle({ auth: { limit: 5, ttl: 60000 } })
+  // The only route that opts into the strict 5/minute limit.
+  @AuthRateLimit()
   @HttpCode(HttpStatus.OK)
   @ApiOperation({
     summary: 'User login',

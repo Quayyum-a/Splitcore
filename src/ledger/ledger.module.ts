@@ -1,16 +1,17 @@
 import { Module } from '@nestjs/common';
 import { LedgerService } from './ledger.service';
+import { LedgerRepository } from './ledger.repository';
 import { PrismaModule } from '../prisma/prisma.module';
 
 /**
  * Ledger Module
  *
- * Provides double-entry bookkeeping for payment transactions.
- * Enforces immutable, balanced ledger entries.
+ * LedgerService: pure double-entry posting logic.
+ * LedgerRepository: transactional persistence and balance queries.
  */
 @Module({
   imports: [PrismaModule],
-  providers: [LedgerService],
-  exports: [LedgerService],
+  providers: [LedgerService, LedgerRepository],
+  exports: [LedgerService, LedgerRepository],
 })
 export class LedgerModule {}

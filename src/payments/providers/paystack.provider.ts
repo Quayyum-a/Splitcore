@@ -18,6 +18,7 @@ import {
  */
 @Injectable()
 export class PaystackProvider implements PaymentProvider {
+  readonly name = 'paystack';
   private readonly logger = new Logger(PaystackProvider.name);
   private readonly secretKey: string;
   private readonly publicKey: string;
@@ -146,6 +147,8 @@ export class PaystackProvider implements PaymentProvider {
         reference: txn.reference,
         status,
         amountKobo: txn.amount, // Paystack returns amount in kobo
+        currency: txn.currency,
+        feesKobo: typeof txn.fees === 'number' ? txn.fees : undefined,
         providerReference: txn.id?.toString(),
         paidAt: txn.paid_at ? new Date(txn.paid_at) : undefined,
         raw: txn,
@@ -166,16 +169,24 @@ export class PaystackProvider implements PaymentProvider {
    * Reject any payload with invalid signature - it's not from Paystack
    */
   verifyWebhookSignature(payload: Buffer, signature: string): boolean {
-    try {
-      const hash = crypto.createHmac('sha512', this.secretKey).update(payload).digest('hex');
+    // With an empty key, HMAC(key='') is computable by anyone, so an
+    // unconfigured secret must reject everything rather than accept forgeries.
+    if (!this.secretKey || !signature) {
+      this.logger.error('Rejecting webhook: secret key not configured or signature missing');
+      return false;
+    }
 
-      const isValid = hash === signature;
+    try {
+      const expected = crypto.createHmac('sha512', this.secretKey).update(payload).digest();
+      const received = Buffer.from(signature, 'hex');
+
+      // timingSafeEqual throws on length mismatch, and a hex decode of a
+      // malformed header can yield a short buffer, so compare lengths first.
+      const isValid =
+        received.length === expected.length && crypto.timingSafeEqual(expected, received);
 
       if (!isValid) {
-        this.logger.warn('Invalid webhook signature detected', {
-          expected: hash.substring(0, 20) + '...',
-          received: signature.substring(0, 20) + '...',
-        });
+        this.logger.warn('Invalid webhook signature detected');
       }
 
       return isValid;
