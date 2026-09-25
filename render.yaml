@@ -25,8 +25,13 @@ services:
       
       - key: DATABASE_URL
         sync: false
-        # Set in Render dashboard:
-        # postgresql://postgres:PASSWORD@db.PROJECT_REF.supabase.co:5432/postgres?sslmode=require&pgbouncer=true&connection_limit=10
+        # Set in Render dashboard. Use Supabase's connection POOLER, not the
+        # direct db.PROJECT_REF.supabase.co host — that host resolves to IPv6
+        # only, so anything without IPv6 egress cannot reach it:
+        # postgresql://postgres.PROJECT_REF:PASSWORD@aws-0-REGION.pooler.supabase.com:5432/postgres?sslmode=require
+        # Port 5432 on the pooler is session mode, which `prisma migrate deploy`
+        # needs. Port 6543 is transaction mode and additionally requires
+        # pgbouncer=true; do not pass pgbouncer=true on port 5432.
       
       # Set to false to run with no Redis at all: no queue, webhooks are
       # processed inline on the request. A stopgap (exhausted provider quota),
@@ -52,6 +57,25 @@ services:
       
       - key: JWT_EXPIRES_IN
         value: 7d
+      
+      # Required in production by src/config/validation.schema.ts — the app
+      # refuses to boot without them. Set both in the Render dashboard.
+      - key: PAYSTACK_SECRET_KEY
+        sync: false
+        # sk_live_... in production, sk_test_... while still testing
+      
+      - key: PAYSTACK_PUBLIC_KEY
+        sync: false
+        # pk_live_... in production, pk_test_... while still testing
+      
+      - key: APP_URL
+        value: https://splitcore-api.onrender.com
+      
+      # Where Paystack returns the guest after checkout. The redirect proves
+      # nothing on its own, so this must land somewhere that re-verifies
+      # server-side. Point it at the frontend once that exists.
+      - key: PAYMENT_CALLBACK_URL
+        value: https://splitcore-api.onrender.com/payments/callback
       
       - key: SENTRY_DSN
         sync: false
@@ -83,7 +107,7 @@ services:
       
       - key: DATABASE_URL
         sync: false
-        # Must match API service DATABASE_URL
+        # Must match API service DATABASE_URL (Supabase pooler, port 5432)
       
       - key: REDIS_HOST
         sync: false
@@ -112,3 +136,16 @@ services:
       
       - key: LOG_LEVEL
         value: info
+      
+      # The worker initiates payouts and runs reconciliation, both of which
+      # call Paystack, so it needs the same credentials as the API.
+      - key: PAYSTACK_SECRET_KEY
+        sync: false
+        # Must match API service PAYSTACK_SECRET_KEY
+      
+      - key: PAYSTACK_PUBLIC_KEY
+        sync: false
+        # Must match API service PAYSTACK_PUBLIC_KEY
+      
+      - key: APP_URL
+        value: https://splitcore-api.onrender.com
