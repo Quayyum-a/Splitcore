@@ -45,8 +45,13 @@ function makeEntertainer(overrides: Record<string, unknown> = {}) {
     stageName: 'DJ Mike',
     legalName: 'Michael Okafor',
     bankName: 'GTBank',
+    bankCode: '058',
     accountNumber: '0123456789',
     kycStatus: 'VERIFIED',
+    // A payable entertainer is one who finished onboarding: VERIFIED alone is
+    // not enough, the destination must also have been confirmed against the
+    // name the bank returned.
+    accountConfirmedAt: new Date('2026-01-01T00:00:00Z'),
     ...overrides,
   };
 }
@@ -188,6 +193,34 @@ describe('PayoutsService.processPayout', () => {
   });
 
   describe('gating', () => {
+    // The resolve/confirm step exists to stop money going to a number nobody
+    // checked. If VERIFIED alone released a payout, that step would be decorative.
+    it('holds a payout when the destination was never confirmed, even if KYC is VERIFIED', async () => {
+      const h = buildHarness();
+      h.prisma.payout.findUnique.mockResolvedValue(makePayout());
+      h.prisma.entertainer.findUnique.mockResolvedValue(
+        makeEntertainer({ kycStatus: 'VERIFIED', accountConfirmedAt: null }),
+      );
+
+      await h.service.processPayout('payout-1');
+
+      expect(h.provider.initiateTransfer).not.toHaveBeenCalled();
+      expect(h.ledgerRepository.post).not.toHaveBeenCalled();
+    });
+
+    it('uses the stored provider bank code rather than guessing from the bank name', async () => {
+      const h = buildHarness();
+      h.prisma.payout.findUnique.mockResolvedValue(makePayout());
+      h.prisma.entertainer.findUnique.mockResolvedValue(
+        // A name resolveBankCode() knows nothing about, but a code we hold.
+        makeEntertainer({ bankName: 'Bank of Nowhere', bankCode: '058' }),
+      );
+
+      await h.service.processPayout('payout-1');
+
+      expect(h.provider.createRecipient.mock.calls[0][0].bankCode).toBe('058');
+    });
+
     it('holds a payout for an entertainer who is not KYC verified', async () => {
       const h = buildHarness();
       h.prisma.payout.findUnique.mockResolvedValue(makePayout());
@@ -229,11 +262,14 @@ describe('PayoutsService.processPayout', () => {
       );
     });
 
+    // bankCode is cleared deliberately: this is the pre-onboarding case, where
+    // all we have is a free-text bank name. With a stored provider code there is
+    // nothing to guess, which the test above covers.
     it('sends an unrecognised bank to manual review rather than guessing a code', async () => {
       const h = buildHarness();
       h.prisma.payout.findUnique.mockResolvedValue(makePayout());
       h.prisma.entertainer.findUnique.mockResolvedValue(
-        makeEntertainer({ bankName: 'Bank of Nowhere' }),
+        makeEntertainer({ bankName: 'Bank of Nowhere', bankCode: null }),
       );
 
       await h.service.processPayout('payout-1');

@@ -119,6 +119,17 @@ async function main() {
       bankName: 'GTBank',
       accountNumber: '0123456789',
       kycStatus: KycStatus.VERIFIED,
+      // A VERIFIED entertainer in demo data should look like one who actually
+      // completed onboarding: payouts require a confirmed destination, so
+      // without these the demo would hold every payout.
+      bankCode: '058',
+      resolvedAccountName: 'PATRICK IMOHIOSEN',
+      accountResolvedAt: new Date('2024-01-01'),
+      accountConfirmedAt: new Date('2024-01-01'),
+      kycSubmittedAt: new Date('2024-01-01'),
+      kycVerifiedAt: new Date('2024-01-01'),
+      identityCheckType: 'BVN',
+      identityCheckedAt: new Date('2024-01-01'),
     },
   });
 

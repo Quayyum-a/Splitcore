@@ -117,8 +117,15 @@ describe('Payments, ledger, webhooks, payouts (e2e)', () => {
         legalName: 'Test Person',
         phone: `+23480${Date.now().toString().slice(-8)}`,
         bankName: 'GTBank',
+        bankCode: '058',
         accountNumber: '0123456789',
         kycStatus,
+        // Payouts require a destination the entertainer confirmed against the
+        // name the bank returned, not just a VERIFIED status. These tests are
+        // about payouts, not onboarding, so they start from a completed one.
+        resolvedAccountName: 'TEST PERSON',
+        accountResolvedAt: new Date(),
+        accountConfirmedAt: new Date(),
       },
     });
     const qr = await prisma.qrCode.create({
