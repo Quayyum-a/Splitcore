@@ -3,6 +3,7 @@ import { INestApplication, ValidationPipe } from '@nestjs/common';
 import request from 'supertest';
 import { AppModule } from '../src/app.module';
 import { PrismaService } from '../src/prisma/prisma.service';
+import { resetDatabase } from './utils/reset-database';
 
 describe('Guest (e2e)', () => {
   let app: INestApplication;
@@ -34,23 +35,14 @@ describe('Guest (e2e)', () => {
 
     prisma = app.get<PrismaService>(PrismaService);
 
-    await cleanDatabase();
+    await resetDatabase(prisma);
     await setupTestData();
   });
 
   afterAll(async () => {
-    await cleanDatabase();
+    await resetDatabase(prisma);
     await app.close();
   });
-
-  async function cleanDatabase() {
-    await prisma.guestSession.deleteMany();
-    await prisma.qrCode.deleteMany();
-    await prisma.venueEntertainer.deleteMany();
-    await prisma.entertainer.deleteMany();
-    await prisma.user.deleteMany();
-    await prisma.venue.deleteMany();
-  }
 
   async function setupTestData() {
     // Create active venue

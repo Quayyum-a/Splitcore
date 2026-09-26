@@ -20,6 +20,7 @@ import * as bcrypt from 'bcryptjs';
 import { JwtService } from '@nestjs/jwt';
 import { AppModule } from '../src/app.module';
 import { PrismaService } from '../src/prisma/prisma.service';
+import { resetDatabase } from './utils/reset-database';
 
 describe('Split Rule Governance (e2e)', () => {
   let app: INestApplication;
@@ -49,25 +50,14 @@ describe('Split Rule Governance (e2e)', () => {
   });
 
   afterAll(async () => {
-    await cleanDatabase();
+    await resetDatabase(prisma);
     await app.close();
   });
 
   beforeEach(async () => {
-    await cleanDatabase();
+    await resetDatabase(prisma);
     await seed();
   });
-
-  async function cleanDatabase() {
-    // Audit events are immutable per row, but TRUNCATE is statement-level and
-    // so is not blocked by the trigger.
-    await prisma.$executeRawUnsafe('TRUNCATE TABLE "split_rule_audit_events" CASCADE');
-    await prisma.splitRule.deleteMany();
-    await prisma.venueEntertainer.deleteMany();
-    await prisma.entertainer.deleteMany();
-    await prisma.user.deleteMany();
-    await prisma.venue.deleteMany();
-  }
 
   function tokenFor(user: { id: string; email: string; role: Role }) {
     return jwtService.sign({ sub: user.id, email: user.email, role: user.role });

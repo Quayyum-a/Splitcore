@@ -6,6 +6,7 @@ import request from 'supertest';
 import * as crypto from 'crypto';
 import { AppModule } from '../src/app.module';
 import { PrismaService } from '../src/prisma/prisma.service';
+import { resetDatabase } from './utils/reset-database';
 import { PaystackProvider } from '../src/payments/providers/paystack.provider';
 import { PaystackPayoutProvider } from '../src/payments/providers/paystack-payout.provider';
 import { PaymentSettlementService } from '../src/payments/payment-settlement.service';
@@ -89,7 +90,7 @@ describe('Payments, ledger, webhooks, payouts (e2e)', () => {
   });
 
   afterAll(async () => {
-    await truncateAll();
+    await resetDatabase(prisma);
     await app.close();
   });
 
@@ -102,16 +103,9 @@ describe('Payments, ledger, webhooks, payouts (e2e)', () => {
       accessCode: 'ac_test',
       reference: params.reference,
     }));
-    await truncateAll();
+    await resetDatabase(prisma);
     await seed();
   });
-
-  async function truncateAll() {
-    await prisma.$executeRawUnsafe(`
-      TRUNCATE TABLE "payouts", "ledger_entries", "ledger_accounts", "webhook_events",
-        "payment_transactions", "guest_sessions", "qr_codes", "split_rules",
-        "venue_entertainers", "entertainers", "users", "venues" CASCADE`);
-  }
 
   async function seed(kycStatus: 'VERIFIED' | 'PENDING' = 'VERIFIED') {
     venue = await prisma.venue.create({

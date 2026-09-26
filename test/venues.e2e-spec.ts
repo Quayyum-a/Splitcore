@@ -3,6 +3,7 @@ import { INestApplication, ValidationPipe } from '@nestjs/common';
 import request from 'supertest';
 import { AppModule } from '../src/app.module';
 import { PrismaService } from '../src/prisma/prisma.service';
+import { resetDatabase } from './utils/reset-database';
 import { Role } from '@prisma/client';
 import * as bcrypt from 'bcryptjs';
 import { JwtService } from '@nestjs/jwt';
@@ -46,22 +47,16 @@ describe('Venues (e2e)', () => {
     jwtService = app.get<JwtService>(JwtService);
 
     // Clean database
-    await cleanDatabase();
+    await resetDatabase(prisma);
 
     // Setup test data
     await setupTestData();
   });
 
   afterAll(async () => {
-    await cleanDatabase();
+    await resetDatabase(prisma);
     await app.close();
   });
-
-  async function cleanDatabase() {
-    // Delete in order to respect foreign key constraints
-    await prisma.user.deleteMany();
-    await prisma.venue.deleteMany();
-  }
 
   async function setupTestData() {
     const passwordHash = await bcrypt.hash('Password123!', 10);
