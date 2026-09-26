@@ -52,6 +52,29 @@ enum LedgerDirection {
   CREDIT
 }
 
+/// Lifecycle of a split rule. Only ACTIVE rules divide money.
+enum SplitRuleStatus {
+  /// Proposed by a venue; waiting on the entertainer. Never used to split.
+  PENDING_ENTERTAINER_APPROVAL
+  /// Agreed (or admin-forced) and in force.
+  ACTIVE
+  /// The entertainer declined. Kept for the audit trail, never activated.
+  REJECTED
+  /// Was ACTIVE, replaced by a later rule. effectiveTo is set.
+  SUPERSEDED
+  /// Proposed but replaced by a newer proposal before anyone responded.
+  WITHDRAWN
+}
+
+/// How a split rule came to exist. An admin-forced rule must never be
+/// indistinguishable from one both sides actually agreed to.
+enum SplitRuleOrigin {
+  /// Venue proposed venue/entertainer shares; entertainer accepted.
+  VENUE_PROPOSAL
+  /// Platform admin set all three shares directly. The exception.
+  ADMIN_OVERRIDE
+}
+
 model User {
   id           String   @id @default(uuid())
   email        String   @unique
@@ -101,6 +124,7 @@ model Entertainer {
   venueEntertainers   VenueEntertainer[]
   qrCodes             QrCode[]
   paymentTransactions PaymentTransaction[]
+  splitRules          SplitRule[]
 
   @@map("entertainers")
 }
@@ -154,22 +178,75 @@ model SplitRule {
   entertainerBps Int       @map("entertainer_bps")
   venueBps       Int       @map("venue_bps")
   platformBps    Int       @map("platform_bps")
-  effectiveFrom  DateTime  @default(now()) @map("effective_from")
+  /// Null while a proposal is unanswered: a rule that is not in force has no
+  /// date from which it applied.
+  effectiveFrom  DateTime? @map("effective_from")
   effectiveTo    DateTime? @map("effective_to")
   createdAt      DateTime  @default(now()) @map("created_at")
   updatedAt      DateTime  @updatedAt @map("updated_at")
 
-  venue               Venue                @relation(fields: [venueId], references: [id])
+  status SplitRuleStatus @default(PENDING_ENTERTAINER_APPROVAL)
+  origin SplitRuleOrigin @default(VENUE_PROPOSAL)
+
+  /// The entertainer whose consent this proposal needs. Null only for an
+  /// ADMIN_OVERRIDE, which bypasses consent by definition.
+  entertainerId String? @map("entertainer_id")
+
+  proposedByUserId String?   @map("proposed_by_user_id")
+  proposedAt       DateTime  @default(now()) @map("proposed_at")
+  respondedAt      DateTime? @map("responded_at")
+
+  /// SHA-256 of the consent token. The token itself is shown once, on
+  /// creation, and never stored: a leaked database cannot be used to consent
+  /// on an entertainer's behalf.
+  responseTokenHash String? @unique @map("response_token_hash")
+
+  venue               Venue                 @relation(fields: [venueId], references: [id])
+  entertainer         Entertainer?          @relation(fields: [entertainerId], references: [id])
   paymentTransactions PaymentTransaction[]
+  auditEvents         SplitRuleAuditEvent[]
 
   @@index([venueId, effectiveFrom])
+  @@index([venueId, status])
   @@map("split_rules")
+}
+
+/// Append-only history of everything that happened to a split rule: who
+/// proposed it, who answered, when, and by what route. Enforced immutable by a
+/// database trigger, the same way ledger_entries are - an audit trail that can
+/// be edited is not an audit trail.
+model SplitRuleAuditEvent {
+  id          String   @id @default(uuid())
+  splitRuleId String   @map("split_rule_id")
+  event       String
+  actorType   String   @map("actor_type")
+  actorId     String?  @map("actor_id")
+  detail      Json?
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  splitRule SplitRule @relation(fields: [splitRuleId], references: [id])
+
+  @@index([splitRuleId, createdAt])
+  @@map("split_rule_audit_events")
+}
+
+/// Single-row table (id is pinned to 'singleton' by a database CHECK) holding
+/// the platform's own cut. Only PLATFORM_ADMIN can change it; venue-scoped
+/// callers can read it but have no code path that writes it.
+model PlatformSettings {
+  id              String   @id @default("singleton")
+  platformFeeBps  Int      @default(500) @map("platform_fee_bps")
+  updatedByUserId String?  @map("updated_by_user_id")
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+
+  @@map("platform_settings")
 }
 
 model PaymentTransaction {
   id                 String        @id @default(uuid())
   externalReference  String        @unique @map("external_reference")
-  provider           String        // "paystack" - string not enum for flexibility
+  provider           String // "paystack" - string not enum for flexibility
   venueId            String        @map("venue_id")
   entertainerId      String?       @map("entertainer_id")
   guestSessionId     String        @map("guest_session_id")
@@ -185,10 +262,10 @@ model PaymentTransaction {
   createdAt          DateTime      @default(now()) @map("created_at")
   updatedAt          DateTime      @updatedAt @map("updated_at")
 
-  venue         Venue          @relation(fields: [venueId], references: [id])
-  entertainer   Entertainer?   @relation(fields: [entertainerId], references: [id])
-  guestSession  GuestSession   @relation(fields: [guestSessionId], references: [id])
-  splitRule     SplitRule?     @relation(fields: [splitRuleId], references: [id], onDelete: Restrict)
+  venue         Venue         @relation(fields: [venueId], references: [id])
+  entertainer   Entertainer?  @relation(fields: [entertainerId], references: [id])
+  guestSession  GuestSession  @relation(fields: [guestSessionId], references: [id])
+  splitRule     SplitRule?    @relation(fields: [splitRuleId], references: [id], onDelete: Restrict)
   ledgerEntries LedgerEntry[]
   payouts       Payout[]
 
@@ -237,7 +314,7 @@ model LedgerEntry {
 
 model WebhookEvent {
   id               String    @id @default(uuid())
-  provider         String    // "paystack"
+  provider         String // "paystack"
   eventType        String    @map("event_type") // "charge.success", "transfer.success", etc.
   externalEventId  String    @unique @map("external_event_id") // Paystack's event ID
   signature        String

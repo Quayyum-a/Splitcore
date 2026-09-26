@@ -1,5 +1,6 @@
 import { PrismaClient, Role, KycStatus } from '@prisma/client';
 import * as bcrypt from 'bcryptjs';
+import { createHash, randomBytes } from 'crypto';
 
 const prisma = new PrismaClient();
 
@@ -246,58 +247,112 @@ async function main() {
   });
   console.log(`✓ QR Codes: 4 codes created (2 venue-only, 2 entertainer-specific)`);
 
-  // 7. Split Rules (one per venue) - check if exists first
-  const existingRule1 = await prisma.splitRule.findFirst({
-    where: { venueId: venue1.id, effectiveTo: null },
+  // 7. Platform settings. One global fee, admin-only. The migration seeds this
+  // row; upserting keeps the seed runnable against a database restored from
+  // before governance existed.
+  await prisma.platformSettings.upsert({
+    where: { id: 'singleton' },
+    update: {},
+    create: { id: 'singleton', platformFeeBps: 500 },
   });
+  console.log('✓ Platform settings: 5% platform fee');
 
-  if (!existingRule1) {
-    await prisma.splitRule.create({
+  // 8. Split rules.
+  //
+  // Seeded as already-agreed rules (VENUE_PROPOSAL + ACCEPTED) rather than
+  // written straight to ACTIVE, with the audit events a real agreement would
+  // have produced. A demo that shows an active split with no history behind it
+  // teaches the wrong thing about how this system works.
+  const AGREED_AT = new Date('2024-01-01');
+
+  async function seedAgreedRule(
+    venueId: string,
+    entertainerId: string,
+    shares: { entertainerBps: number; venueBps: number },
+  ) {
+    const existing = await prisma.splitRule.findFirst({
+      where: { venueId, status: 'ACTIVE', effectiveTo: null },
+    });
+    if (existing) return existing;
+
+    const rule = await prisma.splitRule.create({
+      data: {
+        venueId,
+        entertainerId,
+        entertainerBps: shares.entertainerBps,
+        venueBps: shares.venueBps,
+        platformBps: 500,
+        status: 'ACTIVE',
+        origin: 'VENUE_PROPOSAL',
+        effectiveFrom: AGREED_AT,
+        effectiveTo: null,
+        proposedAt: AGREED_AT,
+        respondedAt: AGREED_AT,
+        // Spent: the entertainer already answered.
+        responseTokenHash: null,
+      },
+    });
+
+    await prisma.splitRuleAuditEvent.createMany({
+      data: [
+        {
+          splitRuleId: rule.id,
+          event: 'PROPOSED',
+          actorType: 'VENUE_ADMIN',
+          detail: { seeded: true, ...shares, platformBps: 500 },
+        },
+        {
+          splitRuleId: rule.id,
+          event: 'ACCEPTED',
+          actorType: 'ENTERTAINER',
+          actorId: entertainerId,
+          detail: { seeded: true, via: 'CONSENT_TOKEN_LINK' },
+        },
+      ],
+    });
+
+    return rule;
+  }
+
+  await seedAgreedRule(venue1.id, dj1.id, { entertainerBps: 7000, venueBps: 2500 }); // 70/25/5
+  await seedAgreedRule(venue2.id, dj2.id, { entertainerBps: 6500, venueBps: 3000 }); // 65/30/5
+  await seedAgreedRule(venue3.id, dj3.id, { entertainerBps: 8000, venueBps: 1500 }); // 80/15/5
+  console.log('✓ Split rules: 3 agreed rules, each with its consent audit trail');
+
+  // One open proposal, so the consent flow is demonstrable without having to
+  // create anything by hand. The token is printed below; it is the only copy.
+  let pendingConsentUrl: string | null = null;
+  const openProposal = await prisma.splitRule.findFirst({
+    where: { venueId: venue1.id, status: 'PENDING_ENTERTAINER_APPROVAL' },
+  });
+  if (!openProposal) {
+    const consentToken = randomBytes(32).toString('hex');
+    const proposal = await prisma.splitRule.create({
       data: {
         venueId: venue1.id,
-        entertainerBps: 7000, // 70%
-        venueBps: 2500, // 25%
-        platformBps: 500, // 5%
-        effectiveFrom: new Date('2024-01-01'),
-        effectiveTo: null,
+        entertainerId: dj1.id,
+        entertainerBps: 7500,
+        venueBps: 2000,
+        platformBps: 500,
+        status: 'PENDING_ENTERTAINER_APPROVAL',
+        origin: 'VENUE_PROPOSAL',
+        // Null on purpose: not in force until accepted.
+        effectiveFrom: null,
+        responseTokenHash: createHash('sha256').update(consentToken).digest('hex'),
       },
     });
-  }
-
-  const existingRule2 = await prisma.splitRule.findFirst({
-    where: { venueId: venue2.id, effectiveTo: null },
-  });
-
-  if (!existingRule2) {
-    await prisma.splitRule.create({
+    await prisma.splitRuleAuditEvent.create({
       data: {
-        venueId: venue2.id,
-        entertainerBps: 6500, // 65%
-        venueBps: 3000, // 30%
-        platformBps: 500, // 5%
-        effectiveFrom: new Date('2024-01-01'),
-        effectiveTo: null,
+        splitRuleId: proposal.id,
+        event: 'PROPOSED',
+        actorType: 'VENUE_ADMIN',
+        detail: { seeded: true, entertainerBps: 7500, venueBps: 2000, platformBps: 500 },
       },
     });
+    const base = process.env.FRONTEND_URL ?? process.env.APP_URL ?? 'http://localhost:3000';
+    pendingConsentUrl = `${base.replace(/\/+$/, '')}/split-rules/${proposal.id}/respond/${consentToken}`;
   }
-
-  const existingRule3 = await prisma.splitRule.findFirst({
-    where: { venueId: venue3.id, effectiveTo: null },
-  });
-
-  if (!existingRule3) {
-    await prisma.splitRule.create({
-      data: {
-        venueId: venue3.id,
-        entertainerBps: 8000, // 80%
-        venueBps: 1500, // 15%
-        platformBps: 500, // 5%
-        effectiveFrom: new Date('2024-01-01'),
-        effectiveTo: null,
-      },
-    });
-  }
-  console.log(`✓ Split rules: 3 venue rules created`);
+  console.log('✓ One pending proposal for Quilox (75/20/5) awaiting DJ Neptune');
 
   // Phase 3 Note: Payment data cannot be seeded directly
   // Payments require actual Paystack API calls and webhook processing
@@ -340,6 +395,13 @@ async function main() {
   console.log(
     `  Venue Admin 2: admin@cubana.com / ${shown('SEED_VENUE2_PASSWORD', DEV_DEFAULTS.venue2)}`,
   );
+  if (pendingConsentUrl) {
+    console.log('');
+    console.log('Pending split proposal — give this link to the entertainer:');
+    console.log(`  ${pendingConsentUrl}`);
+    console.log('  (shown once; the raw token is not stored)');
+  }
+
   console.log('');
   console.log('Sample QR tokens to test Guest endpoint (GET /t/:publicToken):');
   console.log(`  ${qr1.publicToken}`);

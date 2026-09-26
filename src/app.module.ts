@@ -8,6 +8,7 @@ import { validationSchema } from './config/validation.schema';
 import { LoggerModule } from './common/logger/logger.module';
 import { AllExceptionsFilter } from './common/filters/all-exceptions.filter';
 import { PrismaModule } from './prisma/prisma.module';
+import { PlatformSettingsModule } from './platform-settings/platform-settings.module';
 import { RedisModule } from './redis/redis.module';
 import { QueueModule } from './queue/queue.module';
 import { AuthModule } from './auth/auth.module';
@@ -44,6 +45,7 @@ import { WebhooksModule } from './webhooks/webhooks.module';
     QrCodesModule,
     GuestModule,
     SplitRulesModule,
+    PlatformSettingsModule,
     PaymentsModule,
     WebhooksModule,
   ],
