@@ -154,6 +154,23 @@ describe('PayoutsService.processPayout', () => {
       expect(h.ledgerRepository.post).not.toHaveBeenCalled();
     });
 
+    // The previous attempt is parked at the provider awaiting a one-time code.
+    // It is NOT "moved no money" - it may still pay out. Starting another
+    // transfer here would settle the same obligation twice.
+    it('never starts a second transfer while the previous one awaits human action', async () => {
+      const h = buildHarness();
+      h.prisma.payout.findUnique.mockResolvedValue(
+        makePayout({ status: 'PROCESSING', attempts: 1, transferReference: 'po_x_1' }),
+      );
+      h.prisma.entertainer.findUnique.mockResolvedValue(makeEntertainer());
+      h.provider.verifyTransfer.mockResolvedValue({ status: 'requires_action' });
+
+      await h.service.processPayout('payout-1');
+
+      expect(h.provider.initiateTransfer).not.toHaveBeenCalled();
+      expect(h.ledgerRepository.post).not.toHaveBeenCalled();
+    });
+
     it('starts a fresh attempt once the previous one is known to have failed', async () => {
       const h = buildHarness();
       h.prisma.payout.findUnique.mockResolvedValue(
@@ -299,6 +316,50 @@ describe('PayoutsService.processPayout', () => {
       await h.service.processPayout('payout-1');
 
       expect(h.ledgerRepository.post).not.toHaveBeenCalled();
+    });
+
+    // Paystack answers `otp` when "Disable OTP for Transfers" is still on for
+    // the account. No webhook will ever arrive for it, so treating it as
+    // pending parks the payout in PROCESSING indefinitely while the system
+    // reports nothing wrong. It must stay PROCESSING (re-sending risks paying
+    // twice, because the transfer really is live at the provider) but say
+    // loudly that a person has to act.
+    it('flags a transfer that needs human action instead of silently waiting', async () => {
+      const h = buildHarness();
+      h.prisma.payout.findUnique.mockResolvedValue(makePayout());
+      h.prisma.entertainer.findUnique.mockResolvedValue(makeEntertainer());
+      h.provider.initiateTransfer.mockResolvedValue({ status: 'requires_action' });
+
+      await h.service.processPayout('payout-1');
+
+      // liability untouched - the money is still owed
+      expect(h.ledgerRepository.post).not.toHaveBeenCalled();
+
+      const flagged = h.prisma.payout.update.mock.calls
+        .map((c) => c[0])
+        .find((arg) => typeof arg.data?.failureReason === 'string');
+      expect(flagged).toBeDefined();
+      expect(flagged.data.failureReason).toMatch(/OTP|action required/i);
+      // not marked FAILED: the provider-side transfer is still outstanding
+      expect(flagged.data.status).toBeUndefined();
+    });
+
+    it('does not mark a requires_action payout as succeeded or failed', async () => {
+      const h = buildHarness();
+      h.prisma.payout.findUnique.mockResolvedValue(makePayout());
+      h.prisma.entertainer.findUnique.mockResolvedValue(makeEntertainer());
+      h.provider.initiateTransfer.mockResolvedValue({ status: 'requires_action' });
+
+      await h.service.processPayout('payout-1');
+
+      const statuses = [
+        ...h.prisma.payout.update.mock.calls,
+        ...h.prisma.payout.updateMany.mock.calls,
+      ]
+        .map((c) => c[0]?.data?.status)
+        .filter(Boolean);
+      expect(statuses).not.toContain('SUCCESS');
+      expect(statuses).not.toContain('FAILED');
     });
   });
 });

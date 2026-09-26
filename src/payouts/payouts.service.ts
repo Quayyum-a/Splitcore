@@ -72,6 +72,13 @@ export class PayoutsService {
       if (previous.status === 'pending') {
         return; // transfer.* webhook or the sweep resolves it
       }
+      if (previous.status === 'requires_action') {
+        // Parked at the provider awaiting a human. It has NOT moved no money -
+        // it may still pay out - so starting another transfer would settle the
+        // same obligation twice.
+        await this.flagForOperator(payout.id, payout.transferReference);
+        return;
+      }
       // failed | reversed | not_found: that attempt moved no money.
     }
 
@@ -169,8 +176,38 @@ export class PayoutsService {
       await this.markSucceeded(payout.id, transferReference);
     } else if (transfer.status === 'failed' || transfer.status === 'reversed') {
       await this.handleTransferEvent(transferReference, 'failed', transfer.failureReason);
+    } else if (transfer.status === 'requires_action') {
+      await this.flagForOperator(payout.id, transferReference);
     }
     // 'pending': the transfer.* webhook finishes it.
+  }
+
+  /**
+   * The provider accepted the transfer but will not move money without a human
+   * (Paystack `otp`, or `blocked`). No webhook is coming, so the 15-minute
+   * sweep would otherwise re-verify this forever and report nothing wrong.
+   *
+   * The payout stays PROCESSING on purpose: the transfer is genuinely live at
+   * the provider, so re-sending it could pay the same obligation twice. The
+   * ledger is untouched, so the liability is still on the books either way.
+   */
+  private async flagForOperator(payoutId: string, transferReference: string): Promise<void> {
+    const reason =
+      'Action required: the provider will not complete this transfer without a human. ' +
+      'For Paystack this means "Disable OTP for Transfers" is still switched on for the ' +
+      'account (Settings > Preferences); until it is off, no payout can complete ' +
+      'automatically. The transfer is live at the provider, so do not re-send it.';
+
+    await this.prisma.payout.update({
+      where: { id: payoutId },
+      data: { failureReason: reason },
+    });
+
+    this.logger.error('Payout needs operator action; no webhook will complete it', {
+      payoutId,
+      transferReference,
+      providerStatus: 'requires_action',
+    });
   }
 
   /** transfer.success / transfer.failed / transfer.reversed from the provider. */

@@ -1,28 +1,36 @@
 /**
- * E2E tests for split rules (phase-2-core-domain task 10.5).
+ * E2E tests for split-rule governance, against real Postgres.
  *
- * A split rule decides how every tip at a venue is divided, so the two rules
- * that matter are asserted end to end: the shares must sum to exactly
- * 100.00%, and a venue admin must never be able to touch another venue's
- * configuration.
+ * Three things have to hold end to end, and none can be proved by unit tests
+ * alone because all three are ultimately enforced by the database and the
+ * global validation pipe:
+ *
+ *  1. A venue cannot set the platform's cut. Not by supplying it, not by
+ *     omitting it and hoping for a default.
+ *  2. A proposal divides nobody's money until the entertainer accepts it.
+ *  3. Nothing in the history is ever rewritten - superseded rules stay, and
+ *     audit events cannot be edited or deleted at all.
  */
 
 import { Test, TestingModule } from '@nestjs/testing';
 import { INestApplication, ValidationPipe } from '@nestjs/common';
 import request from 'supertest';
-import { Role, Venue } from '@prisma/client';
+import { Entertainer, Role, SplitRuleOrigin, SplitRuleStatus, Venue } from '@prisma/client';
 import * as bcrypt from 'bcryptjs';
 import { JwtService } from '@nestjs/jwt';
 import { AppModule } from '../src/app.module';
 import { PrismaService } from '../src/prisma/prisma.service';
+import { resetDatabase } from './utils/reset-database';
 
-describe('Split Rules (e2e)', () => {
+describe('Split Rule Governance (e2e)', () => {
   let app: INestApplication;
   let prisma: PrismaService;
   let jwtService: JwtService;
 
   let venue1: Venue;
   let venue2: Venue;
+  let entertainer1: Entertainer;
+  let unlinkedEntertainer: Entertainer;
   let platformAdminToken: string;
   let venueAdmin1Token: string;
 
@@ -42,20 +50,14 @@ describe('Split Rules (e2e)', () => {
   });
 
   afterAll(async () => {
-    await cleanDatabase();
+    await resetDatabase(prisma);
     await app.close();
   });
 
   beforeEach(async () => {
-    await cleanDatabase();
+    await resetDatabase(prisma);
     await seed();
   });
-
-  async function cleanDatabase() {
-    await prisma.splitRule.deleteMany();
-    await prisma.user.deleteMany();
-    await prisma.venue.deleteMany();
-  }
 
   function tokenFor(user: { id: string; email: string; role: Role }) {
     return jwtService.sign({ sub: user.id, email: user.email, role: user.role });
@@ -69,6 +71,16 @@ describe('Split Rules (e2e)', () => {
     });
     venue2 = await prisma.venue.create({
       data: { name: 'Venue Two', slug: 'venue-two', location: 'Abuja' },
+    });
+
+    entertainer1 = await prisma.entertainer.create({
+      data: { stageName: 'DJ One', legalName: 'D. One', phone: '+2348000000001' },
+    });
+    unlinkedEntertainer = await prisma.entertainer.create({
+      data: { stageName: 'DJ Elsewhere', legalName: 'D. Else', phone: '+2348000000002' },
+    });
+    await prisma.venueEntertainer.create({
+      data: { venueId: venue1.id, entertainerId: entertainer1.id },
     });
 
     platformAdminToken = tokenFor(
@@ -86,206 +98,331 @@ describe('Split Rules (e2e)', () => {
         },
       }),
     );
+
+    await prisma.platformSettings.upsert({
+      where: { id: 'singleton' },
+      update: { platformFeeBps: 500 },
+      create: { id: 'singleton', platformFeeBps: 500 },
+    });
   }
 
-  const post = (token: string, body: Record<string, unknown>) =>
-    request(app.getHttpServer())
-      .post('/split-rules')
-      .set('Authorization', `Bearer ${token}`)
-      .send(body);
-
+  const server = () => request(app.getHttpServer());
+  const propose = (token: string, body: Record<string, unknown>) =>
+    server().post('/split-rules').set('Authorization', `Bearer ${token}`).send(body);
   const get = (token: string, path: string) =>
-    request(app.getHttpServer()).get(path).set('Authorization', `Bearer ${token}`);
+    server().get(path).set('Authorization', `Bearer ${token}`);
 
-  describe('POST /split-rules', () => {
-    it('creates a rule whose shares sum to 10000 basis points', async () => {
-      const response = await post(platformAdminToken, {
-        venueId: venue1.id,
-        entertainerBps: 8500,
-        venueBps: 1000,
-        platformBps: 500,
-      }).expect(201);
+  const validProposal = () => ({
+    venueId: venue1.id,
+    entertainerId: entertainer1.id,
+    entertainerBps: 7000,
+    venueBps: 2500,
+  });
 
-      expect(response.body).toMatchObject({
-        venueId: venue1.id,
-        entertainerBps: 8500,
-        venueBps: 1000,
-        platformBps: 500,
-      });
-      expect(response.body.effectiveTo).toBeNull();
-    });
-
-    it.each([
-      ['under 100%', { entertainerBps: 8000, venueBps: 1000, platformBps: 500 }],
-      ['over 100%', { entertainerBps: 9000, venueBps: 1000, platformBps: 500 }],
-      ['all zero', { entertainerBps: 0, venueBps: 0, platformBps: 0 }],
-    ])('rejects shares that sum %s', async (_label, shares) => {
-      await post(platformAdminToken, { venueId: venue1.id, ...shares }).expect(400);
+  describe('the platform fee is not a venue decision', () => {
+    it('rejects a proposal that carries platformBps at all', async () => {
+      await propose(venueAdmin1Token, { ...validProposal(), platformBps: 0 }).expect(400);
 
       expect(await prisma.splitRule.count()).toBe(0);
     });
 
-    it('rejects a negative share', async () => {
-      await post(platformAdminToken, {
-        venueId: venue1.id,
-        entertainerBps: 11000,
-        venueBps: -1000,
-        platformBps: 0,
-      }).expect(400);
+    it('stamps the fee from settings, so the venue cannot lower it by omission', async () => {
+      const response = await propose(venueAdmin1Token, validProposal()).expect(201);
+
+      expect(response.body.platformBps).toBe(500);
     });
 
-    it('rejects a fractional basis point', async () => {
-      await post(platformAdminToken, {
-        venueId: venue1.id,
-        entertainerBps: 8500.5,
-        venueBps: 999.5,
-        platformBps: 500,
-      }).expect(400);
-    });
-
-    it('rejects a request with no venue', async () => {
-      await post(platformAdminToken, {
-        entertainerBps: 8500,
-        venueBps: 1000,
-        platformBps: 500,
-      }).expect(400);
-    });
-
-    it('allows a zero platform share, as long as the total is exact', async () => {
-      await post(platformAdminToken, {
-        venueId: venue1.id,
-        entertainerBps: 9000,
-        venueBps: 1000,
-        platformBps: 0,
-      }).expect(201);
-    });
-
-    it('closes out the previous rule instead of leaving two active', async () => {
-      // Two active rules would make "the rule in force" ambiguous, and
-      // settlement divides money by exactly one of them.
-      await post(platformAdminToken, {
-        venueId: venue1.id,
-        entertainerBps: 8500,
-        venueBps: 1000,
-        platformBps: 500,
-      }).expect(201);
-
-      await post(platformAdminToken, {
-        venueId: venue1.id,
+    it('requires the two venue-controlled shares to account for exactly what is left', async () => {
+      await propose(venueAdmin1Token, {
+        ...validProposal(),
         entertainerBps: 7000,
+        venueBps: 3000, // 10000 total, ignores the fee
+      }).expect(400);
+    });
+
+    it('lets a venue admin read the fee but never write it', async () => {
+      await get(venueAdmin1Token, '/platform/settings').expect(200);
+
+      await server()
+        .patch('/platform/settings')
+        .set('Authorization', `Bearer ${venueAdmin1Token}`)
+        .send({ platformFeeBps: 0 })
+        .expect(403);
+    });
+
+    it('lets a platform admin change it, and the next proposal follows the new value', async () => {
+      await server()
+        .patch('/platform/settings')
+        .set('Authorization', `Bearer ${platformAdminToken}`)
+        .send({ platformFeeBps: 1000 })
+        .expect(200);
+
+      // 9500 was valid a moment ago; 9000 is what is splittable now.
+      await propose(venueAdmin1Token, validProposal()).expect(400);
+      const ok = await propose(venueAdmin1Token, {
+        ...validProposal(),
+        entertainerBps: 6500,
         venueBps: 2500,
-        platformBps: 500,
       }).expect(201);
+
+      expect(ok.body.platformBps).toBe(1000);
+    });
+  });
+
+  describe('a proposal does not divide money until the entertainer accepts', () => {
+    it('creates the rule PENDING and keeps it out of the active lookup', async () => {
+      const created = await propose(venueAdmin1Token, validProposal()).expect(201);
+
+      expect(created.body.status).toBe(SplitRuleStatus.PENDING_ENTERTAINER_APPROVAL);
+      expect(created.body.effectiveFrom).toBeNull();
+
+      await get(venueAdmin1Token, `/split-rules/venue/${venue1.id}/active`).expect(404);
+    });
+
+    it('returns a consent link, and the raw token is never stored', async () => {
+      const created = await propose(venueAdmin1Token, validProposal()).expect(201);
+
+      expect(created.body.consentUrl).toContain(
+        `/split-rules/${created.body.id}/respond/${created.body.consentToken}`,
+      );
+
+      const stored = await prisma.splitRule.findUniqueOrThrow({
+        where: { id: created.body.id },
+      });
+      expect(stored.responseTokenHash).not.toBe(created.body.consentToken);
+    });
+
+    it('shows the terms as plain percentages with no login', async () => {
+      const created = await propose(venueAdmin1Token, validProposal()).expect(201);
+
+      const terms = await server()
+        .get(`/split-rules/${created.body.id}/respond/${created.body.consentToken}`)
+        .expect(200);
+
+      expect(terms.body).toMatchObject({
+        venueName: 'Venue One',
+        entertainerName: 'DJ One',
+        entertainerPercentage: 70,
+        venuePercentage: 25,
+        platformPercentage: 5,
+      });
+    });
+
+    it('activates the rule on ACCEPT, with no login', async () => {
+      const created = await propose(venueAdmin1Token, validProposal()).expect(201);
+
+      await server()
+        .post(`/split-rules/${created.body.id}/respond/${created.body.consentToken}`)
+        .send({ decision: 'ACCEPT' })
+        .expect(201);
+
+      const active = await get(venueAdmin1Token, `/split-rules/venue/${venue1.id}/active`).expect(
+        200,
+      );
+      expect(active.body.id).toBe(created.body.id);
+      expect(active.body.status).toBe(SplitRuleStatus.ACTIVE);
+      expect(active.body.effectiveFrom).not.toBeNull();
+    });
+
+    it('never activates on REJECT', async () => {
+      const created = await propose(venueAdmin1Token, validProposal()).expect(201);
+
+      await server()
+        .post(`/split-rules/${created.body.id}/respond/${created.body.consentToken}`)
+        .send({ decision: 'REJECT' })
+        .expect(201);
+
+      await get(venueAdmin1Token, `/split-rules/venue/${venue1.id}/active`).expect(404);
+      const stored = await prisma.splitRule.findUniqueOrThrow({ where: { id: created.body.id } });
+      expect(stored.status).toBe(SplitRuleStatus.REJECTED);
+      expect(stored.effectiveFrom).toBeNull();
+    });
+
+    it('spends the token, so the same link cannot be used twice', async () => {
+      const created = await propose(venueAdmin1Token, validProposal()).expect(201);
+      const url = `/split-rules/${created.body.id}/respond/${created.body.consentToken}`;
+
+      await server().post(url).send({ decision: 'ACCEPT' }).expect(201);
+      await server().post(url).send({ decision: 'REJECT' }).expect(404);
+
+      const stored = await prisma.splitRule.findUniqueOrThrow({ where: { id: created.body.id } });
+      expect(stored.status).toBe(SplitRuleStatus.ACTIVE);
+    });
+
+    it('rejects a forged token', async () => {
+      const created = await propose(venueAdmin1Token, validProposal()).expect(201);
+
+      await server()
+        .post(`/split-rules/${created.body.id}/respond/${'0'.repeat(64)}`)
+        .send({ decision: 'ACCEPT' })
+        .expect(404);
+    });
+
+    it('refuses to propose terms to an entertainer who does not work there', async () => {
+      await propose(venueAdmin1Token, {
+        ...validProposal(),
+        entertainerId: unlinkedEntertainer.id,
+      }).expect(400);
+    });
+
+    it('withdraws an earlier unanswered proposal so two links cannot disagree', async () => {
+      const first = await propose(venueAdmin1Token, validProposal()).expect(201);
+      await propose(venueAdmin1Token, {
+        ...validProposal(),
+        entertainerBps: 6000,
+        venueBps: 3500,
+      }).expect(201);
+
+      const stale = await prisma.splitRule.findUniqueOrThrow({ where: { id: first.body.id } });
+      expect(stale.status).toBe(SplitRuleStatus.WITHDRAWN);
+
+      await server()
+        .post(`/split-rules/${first.body.id}/respond/${first.body.consentToken}`)
+        .send({ decision: 'ACCEPT' })
+        .expect(404);
+    });
+  });
+
+  describe('history is append-only', () => {
+    async function activate(shares: { entertainerBps: number; venueBps: number }) {
+      const created = await propose(venueAdmin1Token, { ...validProposal(), ...shares }).expect(
+        201,
+      );
+      await server()
+        .post(`/split-rules/${created.body.id}/respond/${created.body.consentToken}`)
+        .send({ decision: 'ACCEPT' })
+        .expect(201);
+      return created.body.id as string;
+    }
+
+    it('supersedes the outgoing rule instead of deleting it, leaving exactly one active', async () => {
+      const firstId = await activate({ entertainerBps: 7000, venueBps: 2500 });
+      const secondId = await activate({ entertainerBps: 6000, venueBps: 3500 });
+
+      const first = await prisma.splitRule.findUniqueOrThrow({ where: { id: firstId } });
+      expect(first.status).toBe(SplitRuleStatus.SUPERSEDED);
+      expect(first.effectiveTo).not.toBeNull();
 
       const active = await prisma.splitRule.findMany({
-        where: { venueId: venue1.id, effectiveTo: null },
+        where: { venueId: venue1.id, status: SplitRuleStatus.ACTIVE, effectiveTo: null },
       });
-      expect(active).toHaveLength(1);
-      expect(active[0].entertainerBps).toBe(7000);
+      expect(active.map((r) => r.id)).toEqual([secondId]);
     });
 
-    it('keeps the superseded rule as history rather than deleting it', async () => {
-      await post(platformAdminToken, {
-        venueId: venue1.id,
-        entertainerBps: 8500,
-        venueBps: 1000,
-        platformBps: 500,
+    it('records who proposed and who accepted', async () => {
+      const id = await activate({ entertainerBps: 7000, venueBps: 2500 });
+
+      const trail = await get(venueAdmin1Token, `/split-rules/${id}/audit`).expect(200);
+      const events = trail.body.map((e: { event: string }) => e.event);
+      expect(events).toEqual(['PROPOSED', 'ACCEPTED']);
+      expect(trail.body[0].actorType).toBe('VENUE_ADMIN');
+      expect(trail.body[1].actorType).toBe('ENTERTAINER');
+    });
+
+    // The database refuses, not the application. An audit trail the app could
+    // rewrite is not an audit trail.
+    it('will not let an audit event be edited or deleted', async () => {
+      const id = await activate({ entertainerBps: 7000, venueBps: 2500 });
+      const event = await prisma.splitRuleAuditEvent.findFirstOrThrow({
+        where: { splitRuleId: id },
       });
-      await post(platformAdminToken, {
+
+      await expect(
+        prisma.splitRuleAuditEvent.update({
+          where: { id: event.id },
+          data: { event: 'TAMPERED' },
+        }),
+      ).rejects.toThrow();
+
+      await expect(
+        prisma.splitRuleAuditEvent.delete({ where: { id: event.id } }),
+      ).rejects.toThrow();
+    });
+  });
+
+  describe('platform admin override', () => {
+    const override = (body: Record<string, unknown>) =>
+      server()
+        .post('/split-rules/override')
+        .set('Authorization', `Bearer ${platformAdminToken}`)
+        .send(body);
+
+    it('takes effect at once and is marked ADMIN_OVERRIDE, not a mutual agreement', async () => {
+      const response = await override({
         venueId: venue1.id,
         entertainerBps: 7000,
         venueBps: 2500,
         platformBps: 500,
-      });
+        reason: 'Dispute resolution ticket SC-1042',
+      }).expect(201);
 
-      const all = await prisma.splitRule.findMany({ where: { venueId: venue1.id } });
-      expect(all).toHaveLength(2);
-      expect(all.filter((rule) => rule.effectiveTo !== null)).toHaveLength(1);
+      expect(response.body.status).toBe(SplitRuleStatus.ACTIVE);
+      expect(response.body.origin).toBe(SplitRuleOrigin.ADMIN_OVERRIDE);
+      expect(response.body.entertainerId).toBeNull();
+      expect(response.body.effectiveFrom).not.toBeNull();
     });
-  });
 
-  describe('GET /split-rules/venue/:venueId', () => {
-    beforeEach(async () => {
-      await post(platformAdminToken, {
-        venueId: venue1.id,
-        entertainerBps: 8500,
-        venueBps: 1000,
-        platformBps: 500,
-      });
-      await post(platformAdminToken, {
+    it('writes the reason to the audit trail', async () => {
+      const response = await override({
         venueId: venue1.id,
         entertainerBps: 7000,
         venueBps: 2500,
         platformBps: 500,
-      });
+        reason: 'Dispute resolution ticket SC-1042',
+      }).expect(201);
+
+      const trail = await get(platformAdminToken, `/split-rules/${response.body.id}/audit`).expect(
+        200,
+      );
+      expect(trail.body[0].event).toBe('ADMIN_OVERRIDE');
+      expect(trail.body[0].detail.reason).toBe('Dispute resolution ticket SC-1042');
     });
 
-    it('returns the venue history newest first', async () => {
-      const response = await get(platformAdminToken, `/split-rules/venue/${venue1.id}`).expect(200);
-
-      expect(response.body).toHaveLength(2);
-      expect(response.body[0].entertainerBps).toBe(7000);
-    });
-
-    it('returns an empty list for a venue with no rules', async () => {
-      const response = await get(platformAdminToken, `/split-rules/venue/${venue2.id}`).expect(200);
-
-      expect(response.body).toEqual([]);
-    });
-  });
-
-  describe('GET /split-rules/venue/:venueId/active', () => {
-    it('returns the rule currently in force', async () => {
-      await post(platformAdminToken, {
+    it('still requires all three shares to total 10000', async () => {
+      await override({
         venueId: venue1.id,
-        entertainerBps: 8500,
-        venueBps: 1000,
-        platformBps: 500,
-      });
-
-      const response = await get(
-        platformAdminToken,
-        `/split-rules/venue/${venue1.id}/active`,
-      ).expect(200);
-
-      expect(response.body.entertainerBps).toBe(8500);
-      expect(response.body.effectiveTo).toBeNull();
+        entertainerBps: 7000,
+        venueBps: 2500,
+        platformBps: 1000,
+        reason: 'Dispute resolution ticket SC-1042',
+      }).expect(400);
     });
 
-    it('returns 404 when a venue has no active rule', async () => {
-      // This is what blocks payment initialization for that venue.
-      await get(platformAdminToken, `/split-rules/venue/${venue2.id}/active`).expect(404);
+    it('requires a reason', async () => {
+      await override({
+        venueId: venue1.id,
+        entertainerBps: 7000,
+        venueBps: 2500,
+        platformBps: 500,
+      }).expect(400);
+    });
+
+    it('is closed to venue admins', async () => {
+      await server()
+        .post('/split-rules/override')
+        .set('Authorization', `Bearer ${venueAdmin1Token}`)
+        .send({
+          venueId: venue1.id,
+          entertainerBps: 9500,
+          venueBps: 500,
+          platformBps: 0,
+          reason: 'Trying it on',
+        })
+        .expect(403);
     });
   });
 
   describe('access control', () => {
-    it('rejects an unauthenticated request', async () => {
-      await request(app.getHttpServer()).get(`/split-rules/venue/${venue1.id}/active`).expect(401);
+    it('rejects an unauthenticated proposal', async () => {
+      await server().post('/split-rules').send(validProposal()).expect(401);
     });
 
-    it('lets a venue admin manage their own venue', async () => {
-      await post(venueAdmin1Token, {
-        venueId: venue1.id,
-        entertainerBps: 8500,
-        venueBps: 1000,
-        platformBps: 500,
-      }).expect(201);
+    it('stops a venue admin proposing for another venue', async () => {
+      await propose(venueAdmin1Token, { ...validProposal(), venueId: venue2.id }).expect(403);
     });
 
-    it('stops a venue admin creating a rule for another venue', async () => {
-      await post(venueAdmin1Token, {
-        venueId: venue2.id,
-        entertainerBps: 8500,
-        venueBps: 1000,
-        platformBps: 500,
-      }).expect(403);
-
-      expect(await prisma.splitRule.count({ where: { venueId: venue2.id } })).toBe(0);
-    });
-
-    it('stops a venue admin reading another venue’s rules', async () => {
+    it('stops a venue admin reading another venue history', async () => {
       await get(venueAdmin1Token, `/split-rules/venue/${venue2.id}`).expect(403);
-      await get(venueAdmin1Token, `/split-rules/venue/${venue2.id}/active`).expect(403);
     });
   });
 });

@@ -82,6 +82,13 @@ export const validationSchema = Joi.object({
 
   ALLOWED_ORIGINS: Joi.string().optional(),
 
+  // Origin of the guest/dashboard frontend. Used to build the URL the payment
+  // provider returns the guest to: {FRONTEND_URL}/t/{publicToken}?reference=...
+  // Unset falls back to PAYMENT_CALLBACK_URL, then to the provider dashboard.
+  FRONTEND_URL: Joi.string().uri().optional().messages({
+    'string.uri': 'FRONTEND_URL must be a valid URL, e.g. https://splitcore-app.netlify.app',
+  }),
+
   // Paystack. Required in production and staging: without them the payment
   // endpoints accept requests and then fail at the provider call, and
   // webhook signature verification rejects everything. Optional in

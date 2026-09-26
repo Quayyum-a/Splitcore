@@ -23,6 +23,7 @@ function makeSession(overrides: Record<string, unknown> = {}) {
     id: 'sess-1',
     expiresAt: new Date(NOW.getTime() + 60 * 60 * 1000),
     qrCode: {
+      publicToken: 'tok-quilox-vip-1',
       venueId: 'venue-1',
       entertainerId: 'ent-1',
       isActive: true,
@@ -236,6 +237,77 @@ describe('PaymentsService.initializePayment', () => {
 
     it('defers to the provider dashboard callback when none is configured', async () => {
       const h = buildHarness();
+
+      await h.service.initializePayment(DTO);
+
+      expect(h.provider.initializePayment.mock.calls[0][0].callbackUrl).toBeUndefined();
+    });
+
+    // The guest must come back to the same page the QR sent them to, carrying
+    // the reference, so the frontend can poll GET /payments/:reference/status.
+    // Sending them to the bare API instead is what makes a working payment look
+    // like a broken flow.
+    it('sends the guest back to the frontend tipping page for this QR token', async () => {
+      const h = buildHarness({ FRONTEND_URL: 'https://splitcore-app.netlify.app' });
+
+      const result = await h.service.initializePayment(DTO);
+
+      const url = new URL(h.provider.initializePayment.mock.calls[0][0].callbackUrl);
+      expect(url.origin).toBe('https://splitcore-app.netlify.app');
+      expect(url.pathname).toBe('/t/tok-quilox-vip-1');
+      expect(url.searchParams.get('reference')).toBe(result.reference);
+    });
+
+    it('tolerates a trailing slash on FRONTEND_URL', async () => {
+      const h = buildHarness({ FRONTEND_URL: 'https://splitcore-app.netlify.app/' });
+
+      await h.service.initializePayment(DTO);
+
+      const url = new URL(h.provider.initializePayment.mock.calls[0][0].callbackUrl);
+      expect(url.pathname).toBe('/t/tok-quilox-vip-1');
+    });
+
+    it('percent-encodes a public token so it cannot escape the path', async () => {
+      const h = buildHarness({ FRONTEND_URL: 'https://splitcore-app.netlify.app' });
+      h.prisma.guestSession.findUnique.mockResolvedValue(
+        makeSession({
+          qrCode: { ...makeSession().qrCode, publicToken: 'a/../../evil?x=1' },
+        }),
+      );
+
+      await h.service.initializePayment(DTO);
+
+      const url = new URL(h.provider.initializePayment.mock.calls[0][0].callbackUrl);
+      expect(url.pathname).toBe('/t/a%2F..%2F..%2Fevil%3Fx%3D1');
+    });
+
+    // FRONTEND_URL produces the correct per-token deep link, so it wins over
+    // the older single-URL setting rather than the other way round: a stale
+    // PAYMENT_CALLBACK_URL left pointing at the API must not defeat the fix.
+    it('prefers FRONTEND_URL over a legacy PAYMENT_CALLBACK_URL', async () => {
+      const h = buildHarness({
+        FRONTEND_URL: 'https://splitcore-app.netlify.app',
+        PAYMENT_CALLBACK_URL: 'https://splitcore-api.onrender.com/payments/callback',
+      });
+
+      await h.service.initializePayment(DTO);
+
+      const url = new URL(h.provider.initializePayment.mock.calls[0][0].callbackUrl);
+      expect(url.host).toBe('splitcore-app.netlify.app');
+    });
+
+    it('falls back to PAYMENT_CALLBACK_URL when FRONTEND_URL is unset', async () => {
+      const h = buildHarness({ PAYMENT_CALLBACK_URL: 'https://app.example.com/confirming' });
+
+      const result = await h.service.initializePayment(DTO);
+
+      expect(h.provider.initializePayment.mock.calls[0][0].callbackUrl).toBe(
+        `https://app.example.com/confirming?reference=${result.reference}`,
+      );
+    });
+
+    it('ignores a malformed FRONTEND_URL rather than sending a broken one', async () => {
+      const h = buildHarness({ FRONTEND_URL: 'not a url' });
 
       await h.service.initializePayment(DTO);
 

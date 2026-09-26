@@ -6,6 +6,7 @@ import request from 'supertest';
 import * as crypto from 'crypto';
 import { AppModule } from '../src/app.module';
 import { PrismaService } from '../src/prisma/prisma.service';
+import { resetDatabase } from './utils/reset-database';
 import { PaystackProvider } from '../src/payments/providers/paystack.provider';
 import { PaystackPayoutProvider } from '../src/payments/providers/paystack-payout.provider';
 import { PaymentSettlementService } from '../src/payments/payment-settlement.service';
@@ -89,7 +90,7 @@ describe('Payments, ledger, webhooks, payouts (e2e)', () => {
   });
 
   afterAll(async () => {
-    await truncateAll();
+    await resetDatabase(prisma);
     await app.close();
   });
 
@@ -102,16 +103,9 @@ describe('Payments, ledger, webhooks, payouts (e2e)', () => {
       accessCode: 'ac_test',
       reference: params.reference,
     }));
-    await truncateAll();
+    await resetDatabase(prisma);
     await seed();
   });
-
-  async function truncateAll() {
-    await prisma.$executeRawUnsafe(`
-      TRUNCATE TABLE "payouts", "ledger_entries", "ledger_accounts", "webhook_events",
-        "payment_transactions", "guest_sessions", "qr_codes", "split_rules",
-        "venue_entertainers", "entertainers", "users", "venues" CASCADE`);
-  }
 
   async function seed(kycStatus: 'VERIFIED' | 'PENDING' = 'VERIFIED') {
     venue = await prisma.venue.create({
@@ -141,13 +135,32 @@ describe('Payments, ledger, webhooks, payouts (e2e)', () => {
     sessionId = session.id;
   }
 
+  /**
+   * An ACTIVE rule, which is the only kind that divides money.
+   *
+   * status and effectiveFrom are both set explicitly. A rule created without
+   * them defaults to PENDING_ENTERTAINER_APPROVAL with a null effectiveFrom -
+   * correct for a proposal, but findActiveByVenue then does not return it, and
+   * every payment initialization answers 400 "venue split configuration is not
+   * set up". These tests are about payments, not about consent, so they start
+   * from the state a consented proposal leaves behind.
+   */
   async function addSplitRule(entertainerBps = 8500, venueBps = 1000, platformBps = 500) {
+    const now = new Date();
     await prisma.splitRule.updateMany({
-      where: { venueId: venue.id, effectiveTo: null },
-      data: { effectiveTo: new Date() },
+      where: { venueId: venue.id, status: 'ACTIVE', effectiveTo: null },
+      data: { status: 'SUPERSEDED', effectiveTo: now },
     });
     return prisma.splitRule.create({
-      data: { venueId: venue.id, entertainerBps, venueBps, platformBps },
+      data: {
+        venueId: venue.id,
+        entertainerBps,
+        venueBps,
+        platformBps,
+        status: 'ACTIVE',
+        effectiveFrom: now,
+        respondedAt: now,
+      },
     });
   }
 

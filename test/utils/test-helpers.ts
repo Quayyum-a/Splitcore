@@ -1,6 +1,7 @@
 import { PrismaClient, Role } from '@prisma/client';
 import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcryptjs';
+import { resetDatabase } from './reset-database';
 
 let prisma: PrismaClient;
 
@@ -17,18 +18,12 @@ export async function setupTestDatabase(): Promise<PrismaClient> {
   return prisma;
 }
 
+// Delegates rather than reimplementing. This used to loop over pg_tables
+// truncating one table at a time - a second cleanup strategy that would drift
+// from the suites' own the moment either changed.
 export async function cleanupTestDatabase(): Promise<void> {
   if (!prisma) return;
-
-  const tables = await prisma.$queryRaw<Array<{ tablename: string }>>`
-    SELECT tablename FROM pg_tables WHERE schemaname='public'
-  `;
-
-  for (const { tablename } of tables) {
-    if (tablename !== '_prisma_migrations') {
-      await prisma.$executeRawUnsafe(`TRUNCATE TABLE "public"."${tablename}" CASCADE`);
-    }
-  }
+  await resetDatabase(prisma);
 }
 
 export async function createTestUser(data?: { email?: string; password?: string; role?: Role }) {

@@ -143,21 +143,7 @@ export class PaystackPayoutProvider implements PayoutProvider {
 
       const txn = data.data;
 
-      // Map Paystack status to our standard status
-      let status: 'pending' | 'success' | 'failed' | 'reversed';
-      switch (txn.status) {
-        case 'success':
-          status = 'success';
-          break;
-        case 'failed':
-          status = 'failed';
-          break;
-        case 'reversed':
-          status = 'reversed';
-          break;
-        default:
-          status = 'pending';
-      }
+      const status = mapTransferStatus(txn.status);
 
       return {
         reference: txn.reference,
@@ -220,21 +206,7 @@ export class PaystackPayoutProvider implements PayoutProvider {
 
       const txn = data.data;
 
-      // Map Paystack status to our standard status
-      let status: 'pending' | 'success' | 'failed' | 'reversed';
-      switch (txn.status) {
-        case 'success':
-          status = 'success';
-          break;
-        case 'failed':
-          status = 'failed';
-          break;
-        case 'reversed':
-          status = 'reversed';
-          break;
-        default:
-          status = 'pending';
-      }
+      const status = mapTransferStatus(txn.status);
 
       return {
         reference: txn.reference,
@@ -276,4 +248,35 @@ export class PaystackPayoutProvider implements PayoutProvider {
 
 function maskAccountNumber(accountNumber: string): string {
   return accountNumber.length > 4 ? `******${accountNumber.slice(-4)}` : '****';
+}
+
+/**
+ * Paystack transfer status -> our status.
+ *
+ * `otp` and `blocked` are deliberately NOT folded into `pending`. A pending
+ * transfer resolves itself and a transfer.* webhook finishes it; an `otp`
+ * transfer resolves only when a human types a one-time code into the Paystack
+ * dashboard, and `blocked` needs an account-level problem cleared. Treating
+ * either as "pending" leaves the payout sitting in PROCESSING forever while
+ * the system reports no problem at all.
+ *
+ * `otp` means "Disable OTP for Transfers" is still switched on for this
+ * Paystack account, which no amount of application code can work around.
+ */
+export function mapTransferStatus(
+  providerStatus: string | undefined,
+): 'pending' | 'success' | 'failed' | 'reversed' | 'requires_action' {
+  switch (providerStatus) {
+    case 'success':
+      return 'success';
+    case 'failed':
+      return 'failed';
+    case 'reversed':
+      return 'reversed';
+    case 'otp':
+    case 'blocked':
+      return 'requires_action';
+    default:
+      return 'pending';
+  }
 }

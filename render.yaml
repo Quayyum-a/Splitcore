@@ -71,11 +71,17 @@ services:
       - key: APP_URL
         value: https://splitcore-api.onrender.com
       
-      # Where Paystack returns the guest after checkout. The redirect proves
-      # nothing on its own, so this must land somewhere that re-verifies
-      # server-side. Point it at the frontend once that exists.
+      # Origin of the deployed frontend. Payments use it to return the guest to
+      # the exact page the QR opened — {FRONTEND_URL}/t/{publicToken}?reference=
+      # — which then polls GET /payments/:reference/status. The redirect itself
+      # proves nothing; the status call is what verifies server-side.
+      - key: FRONTEND_URL
+        value: https://splitcore-app.netlify.app
+      
+      # Legacy single-URL fallback, used only when FRONTEND_URL is unset. Left
+      # unset deliberately: FRONTEND_URL supersedes it.
       - key: PAYMENT_CALLBACK_URL
-        value: https://splitcore-api.onrender.com/payments/callback
+        sync: false
       
       # Extra browser origins allowed through CORS, comma-separated. The
       # canonical domains and https://splitcore-app.netlify.app are already

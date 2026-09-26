@@ -1,6 +1,6 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { ConfigService } from '@nestjs/config';
-import { PaystackPayoutProvider } from './paystack-payout.provider';
+import { PaystackPayoutProvider, mapTransferStatus } from './paystack-payout.provider';
 
 describe('PaystackPayoutProvider', () => {
   let provider: PaystackPayoutProvider;
@@ -312,4 +312,29 @@ describe('PaystackPayoutProvider', () => {
       await expect(provider.getBalance()).rejects.toThrow('Paystack balance API failed');
     });
   });
+});
+
+describe('mapTransferStatus', () => {
+  it.each([
+    ['success', 'success'],
+    ['failed', 'failed'],
+    ['reversed', 'reversed'],
+  ])('maps provider %s to %s', (provider, expected) => {
+    expect(mapTransferStatus(provider)).toBe(expected);
+  });
+
+  // The whole point of this mapping existing separately. Paystack answers `otp`
+  // when "Disable OTP for Transfers" is still on for the account: no webhook
+  // will ever follow, so calling it "pending" strands the payout in PROCESSING
+  // and the system reports no problem.
+  it.each(['otp', 'blocked'])('maps %s to requires_action, not pending', (provider) => {
+    expect(mapTransferStatus(provider)).toBe('requires_action');
+  });
+
+  it.each(['pending', 'queued', 'received', undefined, 'something-new'])(
+    'treats %s as pending',
+    (provider) => {
+      expect(mapTransferStatus(provider)).toBe('pending');
+    },
+  );
 });

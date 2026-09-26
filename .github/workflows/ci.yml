@@ -78,5 +78,8 @@ jobs:
       - name: Unit tests
         run: npm test -- --ci --coverage
 
+      # --runInBand lives in the test:e2e script, not here, so a local run
+      # behaves the same way. The E2E suites share one Postgres and each resets
+      # it, so parallel workers truncate the database out from under each other.
       - name: E2E tests
         run: npm run test:e2e -- --ci

@@ -13,6 +13,7 @@ import * as bcrypt from 'bcryptjs';
 import { ThrottlerStorage, ThrottlerStorageService } from '@nestjs/throttler';
 import { AppModule } from '../src/app.module';
 import { PrismaService } from '../src/prisma/prisma.service';
+import { resetDatabase } from './utils/reset-database';
 
 const PASSWORD = 'Correct-Horse-Battery-Staple-1';
 
@@ -41,7 +42,7 @@ describe('Auth (e2e)', () => {
   });
 
   beforeEach(async () => {
-    await prisma.$executeRawUnsafe('TRUNCATE TABLE "public"."users" CASCADE');
+    await resetDatabase(prisma);
     // /auth/login is limited to 5 attempts a minute per IP, and every test
     // here shares one. Clearing the counter keeps each case independent —
     // the limit itself is asserted in security-middleware.e2e-spec.ts.
