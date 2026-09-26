@@ -9,12 +9,16 @@ import { LoggerModule } from './common/logger/logger.module';
 import { AllExceptionsFilter } from './common/filters/all-exceptions.filter';
 import { PrismaModule } from './prisma/prisma.module';
 import { PlatformSettingsModule } from './platform-settings/platform-settings.module';
+import { KycModule } from './kyc/kyc.module';
+import { DashboardModule } from './dashboard/dashboard.module';
+import { EntertainerAuthModule } from './entertainer-auth/entertainer-auth.module';
 import { RedisModule } from './redis/redis.module';
 import { QueueModule } from './queue/queue.module';
 import { AuthModule } from './auth/auth.module';
 import { JwtAuthGuard } from './auth/guards/jwt-auth.guard';
 import { RolesGuard } from './auth/guards/roles.guard';
 import { VenueScopedGuard } from './common/guards/venue-scoped.guard';
+import { EntertainerScopedGuard } from './common/guards/entertainer-scoped.guard';
 import { HealthModule } from './health/health.module';
 import { getThrottlerModuleOptions } from './common/throttler/throttler.config';
 import { VenuesModule } from './venues/venues.module';
@@ -46,6 +50,9 @@ import { WebhooksModule } from './webhooks/webhooks.module';
     GuestModule,
     SplitRulesModule,
     PlatformSettingsModule,
+    KycModule,
+    DashboardModule,
+    EntertainerAuthModule,
     PaymentsModule,
     WebhooksModule,
   ],
@@ -58,6 +65,10 @@ import { WebhooksModule } from './webhooks/webhooks.module';
     // Runs after RolesGuard; only blocks routes marked with @VenueScoped(),
     // ensuring VENUE_ADMIN users can only access their assigned venue.
     { provide: APP_GUARD, useClass: VenueScopedGuard },
+    // Same shape as VenueScopedGuard, for routes about one entertainer. Only
+    // blocks routes marked with @EntertainerScoped(); this is what stops an
+    // entertainer reading anyone else's earnings.
+    { provide: APP_GUARD, useClass: EntertainerScopedGuard },
     // Rate limiting runs after authentication and authorization guards.
     // This ensures legitimate users aren't unfairly throttled during auth checks.
     { provide: APP_GUARD, useClass: ThrottlerGuard },

@@ -117,8 +117,15 @@ describe('Payments, ledger, webhooks, payouts (e2e)', () => {
         legalName: 'Test Person',
         phone: `+23480${Date.now().toString().slice(-8)}`,
         bankName: 'GTBank',
+        bankCode: '058',
         accountNumber: '0123456789',
         kycStatus,
+        // Payouts require a destination the entertainer confirmed against the
+        // name the bank returned, not just a VERIFIED status. These tests are
+        // about payouts, not onboarding, so they start from a completed one.
+        resolvedAccountName: 'TEST PERSON',
+        accountResolvedAt: new Date(),
+        accountConfirmedAt: new Date(),
       },
     });
     const qr = await prisma.qrCode.create({
@@ -614,7 +621,10 @@ describe('Payments, ledger, webhooks, payouts (e2e)', () => {
     it('sends a payout with bad bank details to manual review without touching the balance', async () => {
       await prisma.entertainer.update({
         where: { id: entertainer.id },
-        data: { bankName: 'Bank of Nowhere' },
+        // bankCode cleared as well as the name: with a stored provider code
+        // there is nothing to guess, so the payout would go straight to the
+        // provider rather than to manual review.
+        data: { bankName: 'Bank of Nowhere', bankCode: null },
       });
       const { payout } = await settledPaymentWithEntertainerPayout();
 

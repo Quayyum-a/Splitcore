@@ -212,3 +212,137 @@ against the Supabase pooler for row-level evidence, and the Paystack API with
 the account's own key for provider state. Probes that write were run inside a
 transaction that rolled back, or cleaned up afterwards — production is left as
 it was found, with the demo seed and the single real test tip.
+
+---
+
+# Addendum — 2026-09-26, round 3
+
+Re-verified live against `https://splitcore-api.onrender.com`, the Supabase
+production database, and the connected Paystack account (test mode).
+
+## ✅ Paystack transfer OTP: UNBLOCKED
+
+The blocker that stopped every payout is gone. Run manually, outside the
+application and outside CI, exactly as intended:
+
+```
+POST https://api.paystack.co/transfer/disable_otp
+  -> "OTP has been sent to mobile number ending with 5051 and to email q******@g******.com"
+
+POST https://api.paystack.co/transfer/disable_otp_finalize   {"otp":"<code>"}
+  -> "OTP requirement for transfers has been disabled"
+```
+
+Proven with a real transfer immediately afterwards:
+
+| | Before | After |
+|---|---|---|
+| `POST /transfer` | `status: "otp"` — *"Transfer requires OTP to continue"* | **`status: "success"`** |
+| `GET /transfer/verify/:ref` | n/a | **`status: success`**, amount 10000, `TRF_qgbl6e89zx73pnte` |
+
+**Runbook for whoever holds the account.** This is a rare, sensitive,
+account-level action and is deliberately NOT wired into the app. It must be
+re-run once against the **live** integration when live keys are adopted — the
+call above was made with `sk_test_`, so it changed test mode only. Note also
+that disabling transfer OTP means anything holding the secret key can move money
+with no second factor; that is the trade accepted to make automated payouts
+possible.
+
+Live-mode Transfers additionally require the CAC-registered "Registered
+Business" tier. **Still unverifiable from here** — tier limits apply to live
+mode and this account uses test keys.
+
+## ❌ Task 0 — webhooks: still NOT confirmed, and now understood precisely
+
+Item 8 of the main checklist stays ✅ for signature verification, and item 9 ✅
+for idempotency, both re-tested today: a wrong signature and a missing signature
+each answer 401, and a correctly-signed event is stored raw before anything else
+runs. But end-to-end processing still does not work, and this round pinned down
+why. There are **two independent faults**, not one.
+
+### Fault 1 — no real Paystack webhook has ever reached the endpoint
+
+A new observation makes this decisive. The event row is written **before** the
+enqueue that fails, which was confirmed directly: a signed probe returned HTTP
+500 and still left a `webhook_events` row (`processing_status = PENDING`).
+
+Therefore **any** real delivery would leave a row, even though processing fails.
+`webhook_events` has been empty throughout, across two genuinely successful
+production charges. So nothing has ever been delivered — which means the webhook
+URL is almost certainly **not configured in the Paystack dashboard**. That
+cannot be read through the API; it needs someone to open Settings → API Keys &
+Webhooks and set:
+
+```
+https://splitcore-api.onrender.com/webhooks/paystack
+```
+
+Events: `charge.success`, `transfer.success`, `transfer.failed`, `transfer.reversed`.
+
+### Fault 2 — a correctly-signed webhook still answers 500
+
+Unchanged from the last round and re-tested today. The event stores, then the
+BullMQ enqueue fails and the request 500s. The 5xx is deliberate (Paystack
+retries rather than treating it as delivered) and nothing is lost, but nothing drains
+the queue. `/health` still reports `redis: up`, because a single `PING` succeeds
+while multi-command enqueues fail — the indicator is reassuring and wrong.
+
+Fix remains operational: set `REDIS_ENABLED=false` (webhooks then process inline
+and answer 200) or restore Redis capacity with a **new** Upstash instance, since
+the old password is in this public repo's history.
+
+**Both faults need the account/dashboard holder. Neither is a code defect, and
+neither can be closed from here.** What keeps money moving meanwhile is the
+fallback: `GET /payments/:reference/status` re-verifies with Paystack and settles.
+That is how both real production tips settled.
+
+### Why Phase 6/7 work proceeded anyway
+
+Section 1 of the brief says not to build on unverified webhook processing. That
+concern is about the money pipeline, and the money pipeline is verified by other
+means: the ledger's correctness is enforced by database triggers and proven in
+production (trial balance 0 kobo across 6 entries), settlement is proven through
+the status-poll path, and the webhook → dedupe → ledger sequence is exercised
+end-to-end against real Postgres by `test/payments.e2e-spec.ts`.
+
+Neither the KYC flow nor the dashboards depend on webhooks at all — one is bank
+and identity verification, the other is read-only aggregation over tables that
+already exist. Stopping everything would have delivered nothing while waiting on
+two dashboard settings. Stated here rather than passed over.
+
+## Checklist items this round changes
+
+| # | Item | Was | Now | Evidence |
+|---|---|---|---|---|
+| 3 | Entertainer can complete required onboarding | ❌ | ⚠️ | The five-step flow is built and tested, and steps 1–3 work against the live bank API. Step 4 cannot run on this Paystack tier, so an entertainer lands in `REVIEW` and a platform admin decides. Fully functional only once the tier is upgraded |
+| 16 | Payout can be initiated | ⚠️ | ✅ | A real transfer reached `status: success` today, after the OTP unblock |
+| 20 | Entertainer sees transaction | ❌ | ✅ | `GET /entertainers/:id/overview`, `/transactions`, `/payouts`, reachable with an entertainer's own session and guarded so they can read nothing else |
+| 21 | Venue sees transaction | ❌ | ✅ | `GET /venues/:id/overview`, `/entertainer-earnings`, `/transactions`, `/payouts` |
+| 8 / 9 | Webhook verified / duplicates harmless | ✅ | ✅ | Re-tested today; unchanged |
+| 22 | Reconciliation works | ⚠️ | ⚠️ | Unchanged. Runs in the worker, which is not running |
+
+## What is retained from an identity check, and what is not
+
+| Retained | Not retained |
+|---|---|
+| `identityCheckType` — `BVN` or `NIN` only, enforced by CHECK constraint | The BVN/NIN number itself, in any form |
+| `identityCheckedAt` | Any provider response body containing it |
+| `kycStatus`, `kycVerifiedAt`, `kycFailureReason` (never contains an identity number) | Any log line containing it |
+| `resolvedAccountName` — the name the bank returned | — |
+| `accountNumber`, `bankCode` — needed to address a payout | — |
+
+The number is passed to the provider and discarded. Asserted by tests on both
+the service (it appears nowhere in persisted data) and the provider (it appears
+nowhere in the returned result).
+
+## Still blocked, and on whom
+
+| Blocker | Owner | Blocks |
+|---|---|---|
+| Configure the webhook URL in the Paystack dashboard | Account holder | All webhook processing |
+| `REDIS_ENABLED=false`, or restore Redis | Render / Upstash | All webhook processing, the worker, reconciliation |
+| Upgrade Paystack to the CAC-registered tier | Account holder | Automated identity verification; live-mode Transfers |
+| Re-run the OTP runbook against live keys when adopted | Account holder | Live payouts |
+| Set `FRONTEND_URL` in Render | Render | Guest return journey, consent links, entertainer login links |
+| **Rotate leaked secrets** — Supabase password, Upstash password, `JWT_SECRET`, Sentry DSN | Account holder | Still readable in this public repo's history |
+| Apply `20260926160000_entertainer_kyc_and_access` **with** the deploy | Deployer | — |

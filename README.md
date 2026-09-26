@@ -542,6 +542,62 @@ database trigger, and readable at `GET /split-rules/:id/audit`.
 See [docs/definition-of-done-audit.md](docs/definition-of-done-audit.md) for what
 is actually verified working in production today, and what is still blocked.
 
+## Entertainer onboarding (KYC)
+
+Five steps, in order, under `/entertainers/:id/kyc`:
+
+```
+bank details -> resolve account -> confirm holder -> identity -> VERIFIED
+```
+
+The resolve/confirm pair is the point: the bank is asked who owns the account,
+that name is shown back, and the entertainer confirms it. A typed account number
+is never trusted on its own, and changing the number clears any prior
+confirmation. `GET /kyc/status` returns a derived `nextStep`, so no client has to
+work out where someone is in the flow.
+
+**Identity verification is unavailable on the connected Paystack account.**
+`/identity/bvn/match` answers 404 — the identity APIs need the CAC-registered
+"Registered Business" tier, the same gate as Transfers. So `unavailable` is a
+distinct provider outcome from `failed`, and an entertainer whose check cannot run
+lands in `REVIEW` rather than being told they failed something that never ran. A
+platform admin resolves it with `POST /kyc/review`. Payouts stay gated meanwhile:
+the money is accounted for, just not released.
+
+**Identity numbers are not stored.** Only the document type (`BVN`/`NIN`, enforced
+by a CHECK constraint) and the outcome are retained. See
+[docs/api-audit.md](docs/api-audit.md) for exactly what is and is not kept.
+
+## Entertainer access
+
+Entertainers have no password. `POST /entertainer-auth/login-links/:id` mints a
+single-use 30-minute link; redeeming it at `POST /entertainer-auth/sessions`
+returns a 12-hour JWT scoped to the `ENTERTAINER` role, read-only and limited to
+that entertainer's own data by `EntertainerScopedGuard`.
+
+Chosen over a password account because entertainers have no email on record, the
+people involved are working a club floor rather than managing credentials, and
+the same opaque-token pattern already works for QR codes and split-rule consent.
+There is no notification channel yet, so the link is returned to the caller for
+manual delivery.
+
+## Dashboards
+
+```
+GET /venues/:id/overview | /entertainer-earnings | /transactions | /payouts
+GET /entertainers/:id/overview | /transactions | /payouts
+```
+
+Every figure is summed in the database in integer kobo — nothing is assembled
+client-side and no intermediate value is a float. A venue's "total tips" is gross
+takings; an entertainer's earnings are their own share read from ledger credits.
+Those are different numbers and the code never conflates them.
+
+**"Tonight" is the Africa/Lagos calendar day, midnight to now.** Nigeria is UTC+1
+year round with no daylight saving. Midnight rather than a 6am nightlife
+boundary, so the dashboard agrees with the venue's bank and accountant — the
+boundary is pinned by tests, including the 01:30-Lagos case.
+
 ## Operations
 
 ### Running with no Redis at all (`REDIS_ENABLED=false`)

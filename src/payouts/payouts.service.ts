@@ -97,17 +97,22 @@ export class PayoutsService {
       return;
     }
 
-    if (entertainer.kycStatus !== 'VERIFIED') {
+    // Onboarding gate. Both halves matter: VERIFIED says we believe who they
+    // are, accountConfirmedAt says they confirmed the name the BANK returned for
+    // this account. Without the second, the destination is still just a number
+    // somebody typed - and that is the whole point of the resolve/confirm step.
+    if (entertainer.kycStatus !== 'VERIFIED' || !entertainer.accountConfirmedAt) {
       if (payout.status !== 'QUEUED') {
         await this.prisma.payout.updateMany({
           where: { id: payout.id, status: payout.status },
           data: { status: 'QUEUED' },
         });
       }
-      this.logger.log('Payout held: entertainer not KYC verified', {
+      this.logger.log('Payout held: entertainer onboarding incomplete', {
         payoutId,
         entertainerId: entertainer.id,
         kycStatus: entertainer.kycStatus,
+        accountConfirmed: entertainer.accountConfirmedAt !== null,
       });
       return;
     }
@@ -116,7 +121,9 @@ export class PayoutsService {
       await this.markForReview(payout, 'Missing bank account details');
       return;
     }
-    const bankCode = resolveBankCode(entertainer.bankName);
+    // Onboarding now captures the provider's own bank code. Fall back to
+    // guessing from the bank name only for entertainers who predate that.
+    const bankCode = entertainer.bankCode ?? resolveBankCode(entertainer.bankName);
     if (!bankCode) {
       await this.markForReview(payout, `Unknown bank: ${entertainer.bankName}`);
       return;
@@ -316,7 +323,13 @@ export class PayoutsService {
     const verified = new Set(
       (
         await this.prisma.entertainer.findMany({
-          where: { id: { in: ownerIds }, kycStatus: 'VERIFIED' },
+          // Same gate as processPayout, or the sweep would keep enqueueing
+          // payouts that processPayout then immediately holds again.
+          where: {
+            id: { in: ownerIds },
+            kycStatus: 'VERIFIED',
+            accountConfirmedAt: { not: null },
+          },
           select: { id: true },
         })
       ).map((e) => e.id),

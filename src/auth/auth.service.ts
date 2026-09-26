@@ -8,6 +8,12 @@ export interface JwtPayload {
   sub: string;
   email: string;
   role: string;
+  /**
+   * Present only on ENTERTAINER tokens. Entertainers have no User row - they
+   * authenticate with a one-time link - so `sub` is the entertainer's id and
+   * this carries it explicitly for guards that scope by it.
+   */
+  entertainerId?: string;
 }
 
 export type SafeUser = Omit<User, 'passwordHash'>;
