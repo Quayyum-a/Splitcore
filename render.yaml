@@ -77,6 +77,13 @@ services:
       - key: PAYMENT_CALLBACK_URL
         value: https://splitcore-api.onrender.com/payments/callback
       
+      # Extra browser origins allowed through CORS, comma-separated. The
+      # canonical domains and https://splitcore-app.netlify.app are already
+      # built into src/config/cors.config.ts; use this for Netlify deploy
+      # previews or a custom domain added later.
+      - key: ALLOWED_ORIGINS
+        sync: false
+      
       - key: SENTRY_DSN
         sync: false
         # Set in Render dashboard from Sentry project
