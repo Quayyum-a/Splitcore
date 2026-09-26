@@ -621,7 +621,10 @@ describe('Payments, ledger, webhooks, payouts (e2e)', () => {
     it('sends a payout with bad bank details to manual review without touching the balance', async () => {
       await prisma.entertainer.update({
         where: { id: entertainer.id },
-        data: { bankName: 'Bank of Nowhere' },
+        // bankCode cleared as well as the name: with a stored provider code
+        // there is nothing to guess, so the payout would go straight to the
+        // provider rather than to manual review.
+        data: { bankName: 'Bank of Nowhere', bankCode: null },
       });
       const { payout } = await settledPaymentWithEntertainerPayout();
 
