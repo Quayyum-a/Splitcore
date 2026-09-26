@@ -60,7 +60,6 @@ async function main() {
       name: 'Quilox Nightclub',
       slug: 'quilox-lagos',
       location: 'Victoria Island, Lagos',
-      logoUrl: 'https://example.com/quilox-logo.png',
     },
   });
 
@@ -71,7 +70,6 @@ async function main() {
       name: 'Cubana Chief Priest Club',
       slug: 'cubana-chief-priest',
       location: 'Lekki Phase 1, Lagos',
-      logoUrl: 'https://example.com/cubana-logo.png',
     },
   });
 

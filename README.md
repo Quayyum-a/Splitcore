@@ -494,6 +494,54 @@ Read it from the worker logs today; an admin endpoint is Phase 7.
 
 ---
 
+## Demo / development seed data
+
+`npm run seed` (or `npx prisma db seed`) loads **one coherent demo dataset**:
+3 venues, 5 entertainers spanning every KYC state, 4 QR codes, an agreed split
+rule per venue *with the consent audit trail a real agreement would leave*, and
+one open proposal so the entertainer-consent flow can be demonstrated without
+creating anything by hand.
+
+It is idempotent — safe to re-run; it upserts and skips what already exists.
+
+**This is demo data, not production data.** It is wired into no deploy step:
+`render.yaml`'s build command is `npm ci && prisma generate && npm run build`,
+and `.github/workflows/ci.yml` runs `prisma migrate deploy` only. Seeding is
+always a deliberate, manual act.
+
+Passwords are **not** hardcoded. Outside development the seed refuses to run
+unless `SEED_ADMIN_PASSWORD`, `SEED_VENUE1_PASSWORD` and `SEED_VENUE2_PASSWORD`
+are all set — the development defaults are published in this repository, so
+using them on a live deployment would mean three known logins on a public API.
+
+The open proposal prints a one-time consent URL when it is created. Only its
+SHA-256 hash is stored, so that line is the only copy; losing it means
+re-proposing.
+
+## Split-rule governance
+
+The platform fee is a single global value only `PLATFORM_ADMIN` can change
+(`GET`/`PATCH /platform/settings`). A venue proposes **only** its own and the
+entertainer's shares, which must total `10000 - platformFeeBps`; a payload
+carrying `platformBps` is rejected with 400 rather than ignored.
+
+A proposal is created `PENDING_ENTERTAINER_APPROVAL` with `effectiveFrom` null
+and is never returned by `/split-rules/venue/:id/active`, so **an unagreed rule
+cannot divide a guest's tip**. The entertainer accepts or rejects over an opaque
+single-use token link needing no login, the same pattern as QR tokens. Accepting
+activates the rule and closes out the previous one in one transaction.
+
+`POST /split-rules/override` lets a `PLATFORM_ADMIN` force a complete rule for
+genuine operational necessity. It requires a written reason, is stamped
+`origin=ADMIN_OVERRIDE`, and records no consenting entertainer — so it can never
+be mistaken for terms someone agreed to.
+
+Everything is recorded in `split_rule_audit_events`, which is immutable by
+database trigger, and readable at `GET /split-rules/:id/audit`.
+
+See [docs/definition-of-done-audit.md](docs/definition-of-done-audit.md) for what
+is actually verified working in production today, and what is still blocked.
+
 ## Operations
 
 ### Running with no Redis at all (`REDIS_ENABLED=false`)
