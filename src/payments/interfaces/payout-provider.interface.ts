@@ -100,7 +100,7 @@ export interface Transfer {
   /**
    * Transfer status
    */
-  status: 'pending' | 'success' | 'failed' | 'reversed';
+  status: 'pending' | 'success' | 'failed' | 'reversed' | 'requires_action';
 
   /**
    * Amount transferred in kobo
@@ -137,7 +137,7 @@ export interface TransferVerification {
   /**
    * Current transfer status
    */
-  status: 'pending' | 'success' | 'failed' | 'reversed' | 'not_found';
+  status: 'pending' | 'success' | 'failed' | 'reversed' | 'requires_action' | 'not_found';
 
   /**
    * Amount transferred in kobo
