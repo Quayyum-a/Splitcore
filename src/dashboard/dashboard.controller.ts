@@ -1,4 +1,4 @@
-import { Controller, Get, Param, ParseIntPipe, Query } from '@nestjs/common';
+import { Controller, Get, Param, Query } from '@nestjs/common';
 import {
   ApiTags,
   ApiBearerAuth,
@@ -14,14 +14,10 @@ import {
   EntertainerOverviewResponseDto,
   VenueOverviewResponseDto,
 } from './dto/dashboard.dto';
+import { PaginationQueryDto } from './dto/pagination-query.dto';
 import { Roles } from '../common/decorators/roles.decorator';
 import { VenueScoped } from '../common/guards/venue-scoped.guard';
 import { EntertainerScoped } from '../common/guards/entertainer-scoped.guard';
-
-const PAGINATION = [
-  { name: 'limit', required: false, description: 'Default 50, maximum 200.' },
-  { name: 'offset', required: false, description: 'Default 0.' },
-] as const;
 
 /**
  * Venue-facing dashboard reads. Every route is venue-scoped, so a venue admin
@@ -75,15 +71,9 @@ export class VenueDashboardController {
       'Transaction history for a venue (Time / Amount / Entertainer / Guest / Status / Reference)',
     description: "Newest first. A guest who chose not to be named appears as 'Anonymous'.",
   })
-  @ApiQuery(PAGINATION[0])
-  @ApiQuery(PAGINATION[1])
   @ApiResponse({ status: 200, description: 'Paginated transactions' })
-  async transactions(
-    @Param('venueId') venueId: string,
-    @Query('limit', new ParseIntPipe({ optional: true })) limit?: number,
-    @Query('offset', new ParseIntPipe({ optional: true })) offset?: number,
-  ) {
-    return this.dashboard.venueTransactions(venueId, limit, offset);
+  async transactions(@Param('venueId') venueId: string, @Query() query: PaginationQueryDto) {
+    return this.dashboard.venueTransactions(venueId, query.limit, query.offset);
   }
 
   @Get('payouts')
@@ -95,15 +85,9 @@ export class VenueDashboardController {
       'Payouts arising from payments at this venue, newest first. failureReason carries the ' +
       'operator-facing explanation when a transfer needs human action.',
   })
-  @ApiQuery(PAGINATION[0])
-  @ApiQuery(PAGINATION[1])
   @ApiResponse({ status: 200, description: 'Paginated payouts' })
-  async payouts(
-    @Param('venueId') venueId: string,
-    @Query('limit', new ParseIntPipe({ optional: true })) limit?: number,
-    @Query('offset', new ParseIntPipe({ optional: true })) offset?: number,
-  ) {
-    return this.dashboard.venuePayouts(venueId, limit, offset);
+  async payouts(@Param('venueId') venueId: string, @Query() query: PaginationQueryDto) {
+    return this.dashboard.venuePayouts(venueId, query.limit, query.offset);
   }
 }
 
@@ -146,15 +130,12 @@ export class EntertainerDashboardController {
     summary: "This entertainer's own transaction history",
     description: 'Only tips attributed to them, newest first.',
   })
-  @ApiQuery(PAGINATION[0])
-  @ApiQuery(PAGINATION[1])
   @ApiResponse({ status: 200, description: 'Paginated transactions' })
   async transactions(
     @Param('entertainerId') entertainerId: string,
-    @Query('limit', new ParseIntPipe({ optional: true })) limit?: number,
-    @Query('offset', new ParseIntPipe({ optional: true })) offset?: number,
+    @Query() query: PaginationQueryDto,
   ) {
-    return this.dashboard.entertainerTransactions(entertainerId, limit, offset);
+    return this.dashboard.entertainerTransactions(entertainerId, query.limit, query.offset);
   }
 
   @Get('payouts')
@@ -164,14 +145,8 @@ export class EntertainerDashboardController {
     summary: "This entertainer's own payout history",
     description: 'Payouts against their own payable account, newest first.',
   })
-  @ApiQuery(PAGINATION[0])
-  @ApiQuery(PAGINATION[1])
   @ApiResponse({ status: 200, description: 'Paginated payouts' })
-  async payouts(
-    @Param('entertainerId') entertainerId: string,
-    @Query('limit', new ParseIntPipe({ optional: true })) limit?: number,
-    @Query('offset', new ParseIntPipe({ optional: true })) offset?: number,
-  ) {
-    return this.dashboard.entertainerPayouts(entertainerId, limit, offset);
+  async payouts(@Param('entertainerId') entertainerId: string, @Query() query: PaginationQueryDto) {
+    return this.dashboard.entertainerPayouts(entertainerId, query.limit, query.offset);
   }
 }

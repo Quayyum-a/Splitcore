@@ -364,7 +364,23 @@ describe('helpers', () => {
       makeEntertainer({ ...BANK, resolvedAccountName: 'X', accountConfirmedAt: new Date() }),
       'VERIFY_IDENTITY',
     ],
-    [makeEntertainer({ kycStatus: KycStatus.VERIFIED }), 'DONE'],
+    [
+      makeEntertainer({
+        ...BANK,
+        resolvedAccountName: 'X',
+        accountConfirmedAt: new Date(),
+        kycStatus: KycStatus.VERIFIED,
+      }),
+      'DONE',
+    ],
+    // Legacy data: VERIFIED long before onboarding existed, so no confirmed
+    // destination and payouts held. 'DONE' would claim there is nothing to do.
+    [makeEntertainer({ kycStatus: KycStatus.VERIFIED }), 'BANK_DETAILS'],
+    [makeEntertainer({ ...BANK, kycStatus: KycStatus.VERIFIED }), 'RESOLVE_ACCOUNT'],
+    [
+      makeEntertainer({ ...BANK, resolvedAccountName: 'X', kycStatus: KycStatus.VERIFIED }),
+      'CONFIRM_ACCOUNT',
+    ],
   ])('derives the next step from the record', (entertainer, expected) => {
     expect(nextStepFor(entertainer as never)).toBe(expected);
   });

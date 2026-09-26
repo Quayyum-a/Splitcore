@@ -38,17 +38,19 @@ describe('VenueDashboardController', () => {
   it('forwards pagination for transactions and payouts', async () => {
     const h = buildHarness();
 
-    await h.venue.transactions('venue-1', 25, 50);
-    await h.venue.payouts('venue-1', 10, 0);
+    await h.venue.transactions('venue-1', { limit: 25, offset: 50 });
+    await h.venue.payouts('venue-1', { limit: 10, offset: 0 });
 
     expect(h.service.venueTransactions).toHaveBeenCalledWith('venue-1', 25, 50);
     expect(h.service.venuePayouts).toHaveBeenCalledWith('venue-1', 10, 0);
   });
 
-  it('leaves pagination undefined when not supplied, so the service defaults apply', async () => {
+  // An empty query object is what the ValidationPipe hands over when no query
+  // string is present, and the service supplies the defaults from there.
+  it('passes undefined through for an empty query, so the service defaults apply', async () => {
     const h = buildHarness();
 
-    await h.venue.transactions('venue-1');
+    await h.venue.transactions('venue-1', {});
 
     expect(h.service.venueTransactions).toHaveBeenCalledWith('venue-1', undefined, undefined);
   });
@@ -59,8 +61,8 @@ describe('EntertainerDashboardController', () => {
     const h = buildHarness();
 
     await h.entertainer.overview('ent-1');
-    await h.entertainer.transactions('ent-1', 5, 0);
-    await h.entertainer.payouts('ent-1');
+    await h.entertainer.transactions('ent-1', { limit: 5, offset: 0 });
+    await h.entertainer.payouts('ent-1', {});
 
     expect(h.service.entertainerOverview).toHaveBeenCalledWith('ent-1');
     expect(h.service.entertainerTransactions).toHaveBeenCalledWith('ent-1', 5, 0);
