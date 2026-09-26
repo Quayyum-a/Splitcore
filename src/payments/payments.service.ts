@@ -26,6 +26,7 @@ import { InitializePaymentDto, PaymentInitResponseDto, PaymentStatusResponseDto 
 @Injectable()
 export class PaymentsService {
   private readonly logger = new Logger(PaymentsService.name);
+  private readonly frontendUrl: string | undefined;
   private readonly callbackUrl: string | undefined;
 
   constructor(
@@ -35,9 +36,13 @@ export class PaymentsService {
     @Inject(PAYMENT_PROVIDER) private readonly paymentProvider: PaymentProvider,
     configService: ConfigService,
   ) {
-    // Where the provider sends the guest after checkout: the frontend's
-    // "confirming your payment" page, which polls GET /payments/:ref/status.
-    // Unset = the callback configured in the provider dashboard is used.
+    // Where the provider sends the guest after checkout. Preferred form is the
+    // frontend origin: the guest returns to the very tipping page the QR sent
+    // them to, carrying ?reference=, and that page polls
+    // GET /payments/:reference/status. PAYMENT_CALLBACK_URL is the older
+    // single-URL setting, kept as a fallback. Neither set = the provider
+    // dashboard's own callback is used.
+    this.frontendUrl = configService.get<string>('FRONTEND_URL') || undefined;
     this.callbackUrl = configService.get<string>('PAYMENT_CALLBACK_URL') || undefined;
   }
 
@@ -108,7 +113,7 @@ export class PaymentsService {
         reference: externalReference,
         amountKobo: dto.amountKobo,
         email: dto.email,
-        callbackUrl: this.buildCallbackUrl(externalReference),
+        callbackUrl: this.buildCallbackUrl(externalReference, qrCode.publicToken),
         metadata: {
           transactionId: paymentTransaction.id,
           venueId: qrCode.venueId,
@@ -144,22 +149,37 @@ export class PaymentsService {
   }
 
   /**
-   * Adds the reference to the configured callback URL, preserving any query
-   * string it already carries. Paystack appends its own `reference` and
-   * `trxref` on top, so the handler on the other end has to tolerate a
-   * repeated parameter either way.
+   * Where the provider returns the guest, with the reference attached so the
+   * page that receives them knows which payment to ask about.
+   *
+   * FRONTEND_URL is preferred and yields the per-QR deep link
+   * `{frontend}/t/{publicToken}?reference={ref}` — the same page the QR
+   * opened, so "pay" and "come back" are one continuous flow and no extra
+   * route has to exist. It deliberately wins over PAYMENT_CALLBACK_URL: that
+   * older setting has pointed at the API's own host before, and a stale value
+   * there must not quietly defeat this.
+   *
+   * Paystack appends its own `reference` and `trxref` on top, so whatever
+   * receives this has to tolerate a repeated parameter regardless.
    */
-  private buildCallbackUrl(reference: string): string | undefined {
-    if (!this.callbackUrl) return undefined;
+  private buildCallbackUrl(reference: string, publicToken: string): string | undefined {
+    const base = this.frontendUrl ?? this.callbackUrl;
+    if (!base) return undefined;
 
     try {
-      const url = new URL(this.callbackUrl);
+      const url = new URL(base);
+      if (this.frontendUrl) {
+        // encodeURIComponent, not a template join: a token containing "/" or
+        // "?" would otherwise rewrite the path or inject query parameters.
+        url.pathname = `/t/${encodeURIComponent(publicToken)}`;
+      }
       url.searchParams.set('reference', reference);
       return url.toString();
     } catch {
       this.logger.warn(
-        'PAYMENT_CALLBACK_URL is not a valid URL; falling back to the provider default',
+        'Guest return URL is not a valid URL; falling back to the provider default',
         {
+          frontendUrl: this.frontendUrl,
           callbackUrl: this.callbackUrl,
         },
       );
