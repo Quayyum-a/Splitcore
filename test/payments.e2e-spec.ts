@@ -135,13 +135,32 @@ describe('Payments, ledger, webhooks, payouts (e2e)', () => {
     sessionId = session.id;
   }
 
+  /**
+   * An ACTIVE rule, which is the only kind that divides money.
+   *
+   * status and effectiveFrom are both set explicitly. A rule created without
+   * them defaults to PENDING_ENTERTAINER_APPROVAL with a null effectiveFrom -
+   * correct for a proposal, but findActiveByVenue then does not return it, and
+   * every payment initialization answers 400 "venue split configuration is not
+   * set up". These tests are about payments, not about consent, so they start
+   * from the state a consented proposal leaves behind.
+   */
   async function addSplitRule(entertainerBps = 8500, venueBps = 1000, platformBps = 500) {
+    const now = new Date();
     await prisma.splitRule.updateMany({
-      where: { venueId: venue.id, effectiveTo: null },
-      data: { effectiveTo: new Date() },
+      where: { venueId: venue.id, status: 'ACTIVE', effectiveTo: null },
+      data: { status: 'SUPERSEDED', effectiveTo: now },
     });
     return prisma.splitRule.create({
-      data: { venueId: venue.id, entertainerBps, venueBps, platformBps },
+      data: {
+        venueId: venue.id,
+        entertainerBps,
+        venueBps,
+        platformBps,
+        status: 'ACTIVE',
+        effectiveFrom: now,
+        respondedAt: now,
+      },
     });
   }
 
