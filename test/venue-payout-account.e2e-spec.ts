@@ -58,6 +58,10 @@ describe('Venue payout account (e2e)', () => {
     await seed();
   });
 
+  function tokenFor(user: { id: string; email: string; role: Role }): string {
+    return jwtService.sign({ sub: user.id, email: user.email, role: user.role });
+  }
+
   async function seed() {
     const passwordHash = await bcrypt.hash('Password123!', 10);
 
@@ -68,24 +72,20 @@ describe('Venue payout account (e2e)', () => {
       data: { name: 'Cubana', slug: 'cubana-payout', location: 'Abuja' },
     });
 
-    venueAdminToken = jwtService.sign(
-      await prisma.user
-        .create({
-          data: {
-            email: 'venue@splitcore.dev',
-            passwordHash,
-            role: Role.VENUE_ADMIN,
-            venueId: venue.id,
-          },
-        })
-        .then((u) => ({ sub: u.id, email: u.email, role: u.role })),
+    venueAdminToken = tokenFor(
+      await prisma.user.create({
+        data: {
+          email: 'venue@splitcore.dev',
+          passwordHash,
+          role: Role.VENUE_ADMIN,
+          venueId: venue.id,
+        },
+      }),
     );
-    platformAdminToken = jwtService.sign(
-      await prisma.user
-        .create({
-          data: { email: 'platform@splitcore.dev', passwordHash, role: Role.PLATFORM_ADMIN },
-        })
-        .then((u) => ({ sub: u.id, email: u.email, role: u.role })),
+    platformAdminToken = tokenFor(
+      await prisma.user.create({
+        data: { email: 'platform@splitcore.dev', passwordHash, role: Role.PLATFORM_ADMIN },
+      }),
     );
   }
 
