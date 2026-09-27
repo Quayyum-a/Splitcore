@@ -6,7 +6,23 @@ services:
     region: oregon
     plan: starter
     buildCommand: npm ci --include=dev && npx prisma generate && npm run build
-    startCommand: npm run start:prod
+    # `prisma generate` builds the CLIENT; it does not touch the database. Nothing
+    # here ran `migrate deploy`, so on 2026-09-26 the split-rule governance code
+    # shipped against a schema without its columns and every split-rule query threw
+    # 500 — including GET /t/:token and POST /payments/initialize. Tipping was down
+    # in production and no guest could tip.
+    #
+    # Migrating in the start command guarantees it runs, which a pre-deploy command
+    # does not if the plan silently ignores it. `migrate deploy` is a no-op when
+    # nothing is pending, takes a Postgres advisory lock so concurrent instances
+    # serialise rather than race, and fails the boot if a migration fails — which is
+    # the behaviour we want. Serving a schema-mismatched app is what caused the
+    # outage; refusing to start is louder and safer.
+    #
+    # `prisma` is a devDependency, and the build installs with --include=dev, so the
+    # CLI is present at runtime. If that ever changes, move `prisma` to
+    # dependencies rather than dropping this.
+    startCommand: npx prisma migrate deploy && npm run start:prod
     healthCheckPath: /health
     autoDeploy: true
     branch: main
@@ -107,6 +123,10 @@ services:
     region: oregon
     plan: starter
     buildCommand: npm ci --include=dev && npx prisma generate && npm run build
+    # The API service owns migrations (see its startCommand). The worker only reads
+    # the schema the API has already migrated. Adding `migrate deploy` here too
+    # would be safe — Prisma's advisory lock serialises them — but one owner is
+    # easier to reason about.
     startCommand: npm run start:worker:prod
     autoDeploy: true
     branch: main

@@ -344,10 +344,15 @@ export function nextStepFor(e: {
   resolvedAccountName: string | null;
   accountConfirmedAt: Date | null;
 }): KycStep {
-  if (e.kycStatus === KycStatus.VERIFIED) return 'DONE';
+  // Bank details and confirmation are checked BEFORE the VERIFIED shortcut, on
+  // purpose. Entertainers who predate onboarding are VERIFIED with no confirmed
+  // account, and payouts require both — so reporting 'DONE' would say there is
+  // nothing left to do while their payouts sit held. The honest answer is the
+  // step that unblocks them.
   if (!e.accountNumber || !e.bankCode) return 'BANK_DETAILS';
   if (!e.resolvedAccountName) return 'RESOLVE_ACCOUNT';
   if (!e.accountConfirmedAt) return 'CONFIRM_ACCOUNT';
+  if (e.kycStatus === KycStatus.VERIFIED) return 'DONE';
   return 'VERIFY_IDENTITY';
 }
 
