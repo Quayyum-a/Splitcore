@@ -10,6 +10,8 @@ import { AllExceptionsFilter } from './common/filters/all-exceptions.filter';
 import { PrismaModule } from './prisma/prisma.module';
 import { PlatformSettingsModule } from './platform-settings/platform-settings.module';
 import { KycModule } from './kyc/kyc.module';
+import { BanksModule } from './banks/banks.module';
+import { VenuePayoutAccountModule } from './venue-payout-account/venue-payout-account.module';
 import { DashboardModule } from './dashboard/dashboard.module';
 import { EntertainerAuthModule } from './entertainer-auth/entertainer-auth.module';
 import { RedisModule } from './redis/redis.module';
@@ -51,6 +53,8 @@ import { WebhooksModule } from './webhooks/webhooks.module';
     SplitRulesModule,
     PlatformSettingsModule,
     KycModule,
+    BanksModule,
+    VenuePayoutAccountModule,
     DashboardModule,
     EntertainerAuthModule,
     PaymentsModule,

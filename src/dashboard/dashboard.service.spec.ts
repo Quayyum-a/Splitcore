@@ -7,7 +7,12 @@ const LAGOS_MIDNIGHT = '2026-09-25T23:00:00.000Z';
 
 function buildHarness() {
   const prisma = {
-    venue: { findUnique: jest.fn().mockResolvedValue({ id: 'venue-1', name: 'Quilox' }) },
+    venue: {
+      findUnique: jest.fn().mockResolvedValue({ id: 'venue-1', name: 'Quilox' }),
+      // venueOverview reads this to report whether the venue's own share can
+      // actually move, so a caller sees why a balance is sitting still.
+      findUniqueOrThrow: jest.fn().mockResolvedValue({ accountConfirmedAt: null }),
+    },
     entertainer: {
       findUnique: jest.fn().mockResolvedValue({ id: 'ent-1', stageName: 'DJ Neptune' }),
     },
@@ -49,6 +54,33 @@ describe('DashboardService.venueOverview', () => {
     });
     // Integer kobo, never a float.
     expect(Number.isInteger(result.totalTipsKobo)).toBe(true);
+  });
+
+  // The venue's own share, broken out. Before this the tile answered "how much is
+  // unpaid here" but never "how much of it is mine".
+  it("reports the venue's own unpaid and paid share separately", async () => {
+    const h = buildHarness();
+    h.prisma.payout.aggregate
+      .mockResolvedValueOnce({ _sum: { amountKobo: 2100000 } }) // all unpaid here
+      .mockResolvedValueOnce({ _sum: { amountKobo: 950000 } }) // venue's own unpaid
+      .mockResolvedValueOnce({ _sum: { amountKobo: 4275000 } }); // venue's own paid
+
+    const result = await h.service.venueOverview('venue-1', NOW);
+
+    expect(result.pendingPayoutsKobo).toBe(2100000);
+    expect(result.ownPendingPayoutsKobo).toBe(950000);
+    expect(result.ownPaidOutKobo).toBe(4275000);
+    // A subset, never a separate total to add on.
+    expect(result.ownPendingPayoutsKobo).toBeLessThanOrEqual(result.pendingPayoutsKobo);
+  });
+
+  it('reports whether the venue can actually be paid', async () => {
+    const h = buildHarness();
+
+    expect((await h.service.venueOverview('venue-1', NOW)).ownPayoutAccountConfirmed).toBe(false);
+
+    h.prisma.venue.findUniqueOrThrow.mockResolvedValue({ accountConfirmedAt: new Date() });
+    expect((await h.service.venueOverview('venue-1', NOW)).ownPayoutAccountConfirmed).toBe(true);
   });
 
   it('windows tips to the Lagos calendar day', async () => {
@@ -302,6 +334,32 @@ describe('DashboardService transaction and payout history', () => {
 
     expect(h.prisma.paymentTransaction.findMany.mock.calls[0][0].where).toEqual({
       entertainerId: 'ent-1',
+    });
+  });
+});
+
+describe('DashboardService venue payout separation', () => {
+  // Merging these would put "475,000 to DJ Neptune" and "475,000 to the venue"
+  // indistinguishably in one list, and a venue reconciling what it is owed would
+  // add up the wrong column.
+  it("excludes the venue's own share from the entertainer payout list", async () => {
+    const h = buildHarness();
+
+    await h.service.venuePayouts('venue-1');
+
+    expect(h.prisma.payout.findMany.mock.calls[0][0].where).toEqual({
+      paymentTransaction: { venueId: 'venue-1' },
+      ledgerAccount: { type: 'ENTERTAINER_PAYABLE' },
+    });
+  });
+
+  it("scopes own-payouts to this venue's own payable account", async () => {
+    const h = buildHarness();
+
+    await h.service.venueOwnPayouts('venue-1');
+
+    expect(h.prisma.payout.findMany.mock.calls[0][0].where).toEqual({
+      ledgerAccount: { type: 'VENUE_PAYABLE', ownerId: 'venue-1' },
     });
   });
 });

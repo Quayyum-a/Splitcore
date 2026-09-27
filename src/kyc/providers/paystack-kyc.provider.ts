@@ -4,6 +4,7 @@ import {
   IdentityCheckResult,
   IdentityDocumentType,
   KycProvider,
+  ProviderBank,
   ResolvedAccount,
 } from '../interfaces/kyc-provider.interface';
 
@@ -29,6 +30,50 @@ export class PaystackKycProvider implements KycProvider {
     if (!this.secretKey) {
       this.logger.warn('Paystack secret key not configured; KYC verification will not work.');
     }
+  }
+
+  /**
+   * `perPage` is set high deliberately: the Nigerian list is ~290 banks and the
+   * default page size is 50, so paging would mean six round trips for data the
+   * caller caches for a day anyway.
+   */
+  async listBanks(): Promise<ProviderBank[]> {
+    const url = `${this.baseUrl}/bank?currency=NGN&perPage=1000`;
+
+    const response = await fetch(url, {
+      headers: { Authorization: `Bearer ${this.secretKey}` },
+    });
+
+    const body = (await response.json().catch(() => null)) as {
+      status?: boolean;
+      message?: string;
+      data?: Array<{
+        name?: string;
+        code?: string;
+        active?: boolean;
+        supports_transfer?: boolean;
+      }>;
+    } | null;
+
+    if (!response.ok || !body?.status || !Array.isArray(body.data)) {
+      const message = body?.message ?? response.statusText;
+      this.logger.warn('Bank list request failed', { status: response.status, message });
+      throw new Error(`Paystack bank list failed: ${message}`);
+    }
+
+    return body.data
+      .filter(
+        (b): b is { name: string; code: string; active?: boolean; supports_transfer?: boolean } =>
+          Boolean(b.name && b.code),
+      )
+      .map((b) => ({
+        name: b.name,
+        code: b.code,
+        // Absent flags are read as capable: the list is the set of banks
+        // Paystack pays into, so omitting a flag should not hide a bank.
+        active: b.active !== false,
+        supportsTransfer: b.supports_transfer !== false,
+      }));
   }
 
   async resolveAccount(accountNumber: string, bankCode: string): Promise<ResolvedAccount> {

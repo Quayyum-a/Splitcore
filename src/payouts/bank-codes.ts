@@ -2,10 +2,17 @@
  * Bank name -> Paystack bank code, for the bank names Phase 2 stores on
  * Entertainer.bankName.
  *
- * Interim: KYC/onboarding (Phase 6) should store the provider bank code
- * directly, resolved from the provider's bank list, instead of a free-text
- * name. Unknown names return undefined and the payout goes to manual review
- * rather than guessing.
+ * Kept, not retired, now that BanksService holds the provider's live list. It has
+ * two jobs that the live list cannot do on its own:
+ *
+ *  1. An ALIAS MAP. Paystack calls these banks "Guaranty Trust Bank", "United
+ *     Bank For Africa" and "First City Monument Bank"; everyone in Nigeria says
+ *     GTBank, UBA and FCMB. Without this, the obvious input is a 400.
+ *  2. A cold-start fallback, so onboarding still works when the provider is
+ *     unreachable and nothing has been cached yet.
+ *
+ * Unknown names still return undefined rather than guessing, and a payout for an
+ * entertainer whose bank cannot be resolved goes to manual review.
  */
 const PAYSTACK_BANK_CODES: Record<string, string> = {
   GTBank: '058',

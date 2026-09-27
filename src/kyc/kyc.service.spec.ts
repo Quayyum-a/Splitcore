@@ -10,6 +10,7 @@ import {
 } from './kyc.service';
 import { KycProvider } from './interfaces/kyc-provider.interface';
 import { AccountResolutionError } from './providers/paystack-kyc.provider';
+import { BanksService } from '../banks/banks.service';
 
 function makeEntertainer(overrides: Record<string, unknown> = {}) {
   return {
@@ -55,17 +56,37 @@ function buildHarness(entertainer = makeEntertainer()) {
     verifyIdentity: jest.fn().mockResolvedValue({ outcome: 'verified' }),
   } as unknown as KycProvider;
 
-  const service = new KycService(prisma as unknown as PrismaService, provider);
-  return { service, prisma, provider: provider as unknown as jest.Mocked<KycProvider> };
+  // Resolves a bank name/code against the provider's live list. Mocked to a
+  // fixed bank: what it resolves to is BanksService's own test's business.
+  const banks = {
+    resolve: jest.fn().mockResolvedValue({ name: 'Guaranty Trust Bank', code: '058' }),
+  } as unknown as BanksService;
+
+  const service = new KycService(prisma as unknown as PrismaService, provider, banks);
+  return { service, prisma, provider: provider as unknown as jest.Mocked<KycProvider>, banks };
 }
 
-const BANK = { bankName: 'GTBank', bankCode: '058', accountNumber: '0123456789' };
+/**
+ * What a caller SENDS. No bankCode: the service resolves it from the bank list,
+ * which is the whole point of the change.
+ */
+const BANK_INPUT = { bankName: 'GTBank', accountNumber: '0123456789' };
+
+/**
+ * What ends up STORED once resolved - the bank's own formal name plus its code.
+ * Kept separate from the input because they are deliberately not the same shape.
+ */
+const BANK = {
+  bankName: 'Guaranty Trust Bank',
+  bankCode: '058',
+  accountNumber: '0123456789',
+};
 
 describe('KycService.submitBankDetails', () => {
   it('moves the entertainer to PENDING', async () => {
     const h = buildHarness();
 
-    const view = await h.service.submitBankDetails('ent-1', BANK);
+    const view = await h.service.submitBankDetails('ent-1', BANK_INPUT);
 
     expect(view.status).toBe(KycStatus.PENDING);
     expect(view.nextStep).toBe('RESOLVE_ACCOUNT');
@@ -84,7 +105,7 @@ describe('KycService.submitBankDetails', () => {
       }),
     );
 
-    await h.service.submitBankDetails('ent-1', BANK);
+    await h.service.submitBankDetails('ent-1', BANK_INPUT);
 
     const data = h.prisma.entertainer.update.mock.calls[0][0].data;
     expect(data.resolvedAccountName).toBeNull();
@@ -103,7 +124,7 @@ describe('KycService.submitBankDetails', () => {
       }),
     );
 
-    await h.service.submitBankDetails('ent-1', BANK);
+    await h.service.submitBankDetails('ent-1', BANK_INPUT);
 
     const data = h.prisma.entertainer.update.mock.calls[0][0].data;
     expect(data.accountConfirmedAt).toBeUndefined();
@@ -112,14 +133,18 @@ describe('KycService.submitBankDetails', () => {
   it('refuses while suspended', async () => {
     const h = buildHarness(makeEntertainer({ kycStatus: KycStatus.SUSPENDED }));
 
-    await expect(h.service.submitBankDetails('ent-1', BANK)).rejects.toThrow(ConflictException);
+    await expect(h.service.submitBankDetails('ent-1', BANK_INPUT)).rejects.toThrow(
+      ConflictException,
+    );
   });
 
   it('404s for an unknown entertainer', async () => {
     const h = buildHarness();
     h.prisma.entertainer.findUnique.mockResolvedValue(null);
 
-    await expect(h.service.submitBankDetails('nope', BANK)).rejects.toThrow(NotFoundException);
+    await expect(h.service.submitBankDetails('nope', BANK_INPUT)).rejects.toThrow(
+      NotFoundException,
+    );
   });
 });
 

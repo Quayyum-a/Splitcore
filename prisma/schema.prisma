@@ -103,6 +103,20 @@ model Venue {
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
+  // Payout destination, deliberately the same shape as Entertainer's. A venue's
+  // own share accrued as VENUE_PAYABLE with nowhere to send it; these are what
+  // give it somewhere. No identity-verification fields: a venue is a business
+  // already vetted when it was onboarded, not an unknown individual.
+  bankName      String? @map("bank_name")
+  bankCode      String? @map("bank_code")
+  accountNumber String? @map("account_number")
+
+  /// The account holder's name as the BANK reports it, never as anyone typed it.
+  resolvedAccountName String?   @map("resolved_account_name")
+  accountResolvedAt   DateTime? @map("account_resolved_at")
+  /// Set when a venue admin confirms the resolved name. Payouts require it.
+  accountConfirmedAt  DateTime? @map("account_confirmed_at")
+
   users               User[]
   venueEntertainers   VenueEntertainer[]
   qrCodes             QrCode[]

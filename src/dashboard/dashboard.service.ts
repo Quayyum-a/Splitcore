@@ -46,7 +46,7 @@ export class DashboardService {
 
     const window = tonight(now);
 
-    const [tips, entertainerCount, pending] = await Promise.all([
+    const [tips, entertainerCount, pending, ownPending, ownPaid] = await Promise.all([
       this.prisma.paymentTransaction.aggregate({
         where: {
           venueId,
@@ -59,9 +59,10 @@ export class DashboardService {
       this.prisma.venueEntertainer.count({
         where: { venueId, entertainer: { isActive: true } },
       }),
-      // Attributed through the payment, so this is money owed because of
-      // transactions AT THIS VENUE - covering both the venue's own payable and
-      // its entertainers'. A balance as it stands, not a figure for the window.
+      // Attributed through the payment, so this is everything owed because of
+      // transactions AT THIS VENUE - the venue's own share and its entertainers'
+      // together. A balance as it stands, not a figure for the window. Kept as
+      // it was so the existing tile does not change meaning underneath anyone.
       this.prisma.payout.aggregate({
         where: {
           status: { in: OPEN_PAYOUT_STATUSES },
@@ -69,7 +70,29 @@ export class DashboardService {
         },
         _sum: { amountKobo: true },
       }),
+      // The venue's OWN share, broken out. Without this the tile answered
+      // "how much is unpaid here" but never "how much of it is mine", which is
+      // the question a venue operator is actually asking.
+      this.prisma.payout.aggregate({
+        where: {
+          status: { in: OPEN_PAYOUT_STATUSES },
+          ledgerAccount: { type: 'VENUE_PAYABLE', ownerId: venueId },
+        },
+        _sum: { amountKobo: true },
+      }),
+      this.prisma.payout.aggregate({
+        where: {
+          status: PayoutStatus.SUCCESS,
+          ledgerAccount: { type: 'VENUE_PAYABLE', ownerId: venueId },
+        },
+        _sum: { amountKobo: true },
+      }),
     ]);
+
+    const venue_ = await this.prisma.venue.findUniqueOrThrow({
+      where: { id: venueId },
+      select: { accountConfirmedAt: true },
+    });
 
     return {
       venueId,
@@ -80,6 +103,12 @@ export class DashboardService {
       transactionCount: tips._count._all,
       entertainerCount,
       pendingPayoutsKobo: pending._sum.amountKobo ?? 0,
+      ownPendingPayoutsKobo: ownPending._sum.amountKobo ?? 0,
+      ownPaidOutKobo: ownPaid._sum.amountKobo ?? 0,
+      // Surfaced here because a venue looking at money it is owed needs to know
+      // whether anything is stopping it arriving. Unconfirmed means the balance
+      // accrues and nothing moves.
+      ownPayoutAccountConfirmed: venue_.accountConfirmedAt !== null,
     };
   }
 
@@ -243,8 +272,32 @@ export class DashboardService {
     return { total, limit: take, offset: skip, items };
   }
 
+  /**
+   * Payouts to the ENTERTAINERS who performed at this venue.
+   *
+   * Deliberately excludes the venue's own share. Merging the two would produce a
+   * list where "₦475,000 — DJ Neptune" and "₦475,000 — (the venue itself)" sit
+   * indistinguishably next to each other, and a venue operator reconciling what
+   * they are owed against what their performers are owed would be adding up the
+   * wrong column. See venueOwnPayouts.
+   */
   async venuePayouts(venueId: string, limit?: number, offset?: number) {
-    return this.payouts({ paymentTransaction: { venueId } }, limit, offset);
+    return this.payouts(
+      { paymentTransaction: { venueId }, ledgerAccount: { type: 'ENTERTAINER_PAYABLE' } },
+      limit,
+      offset,
+    );
+  }
+
+  /** The venue's own share. Structurally separate, never merged with the above. */
+  async venueOwnPayouts(venueId: string, limit?: number, offset?: number) {
+    return this.payouts(
+      {
+        ledgerAccount: { type: 'VENUE_PAYABLE', ownerId: venueId },
+      },
+      limit,
+      offset,
+    );
   }
 
   async entertainerPayouts(entertainerId: string, limit?: number, offset?: number) {
