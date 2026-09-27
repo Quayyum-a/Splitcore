@@ -1,7 +1,7 @@
 import { Inject, Injectable, Logger, NotFoundException, ConflictException } from '@nestjs/common';
 import { InjectQueue } from '@nestjs/bullmq';
 import { Queue } from 'bullmq';
-import { Payout, PayoutStatus } from '@prisma/client';
+import { LedgerAccountType, Payout, PayoutStatus } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { LedgerService } from '../ledger/ledger.service';
 import { LedgerRepository } from '../ledger/ledger.repository';
@@ -12,6 +12,18 @@ import { resolveBankCode } from './bank-codes';
 
 /** Automatic re-attempts after the bank rejects/reverses a transfer. */
 export const MAX_AUTOMATIC_TRANSFER_ATTEMPTS = 3;
+
+/** Where a payout is going, once the account type has been resolved. */
+type PayoutDestination =
+  | {
+      outcome: 'send';
+      recipientName: string;
+      bankCode: string;
+      accountNumber: string;
+      transferReason: string;
+    }
+  | { outcome: 'hold'; reason: string }
+  | { outcome: 'review'; reason: string };
 
 /** A PROCESSING payout untouched this long gets re-verified by the sweep. */
 const STALE_PROCESSING_MS = 15 * 60 * 1000;
@@ -82,52 +94,35 @@ export class PayoutsService {
       // failed | reversed | not_found: that attempt moved no money.
     }
 
-    if (payout.ledgerAccount.type !== 'ENTERTAINER_PAYABLE') {
-      // Venues have no payout destination modelled yet; the obligation stays
-      // QUEUED and the venue's payable balance keeps accruing.
-      this.logger.log('Venue payouts not enabled; payout stays queued', { payoutId });
+    // Entertainer or venue: both are a payable account with a bank destination
+    // behind it, and everything downstream of this point - claiming the attempt,
+    // creating the recipient, transferring, retrying, never dropping the
+    // liability - is identical. Only the lookup and the gate differ.
+    const destination = await this.resolveDestination(payout);
+
+    if (destination.outcome === 'review') {
+      await this.markForReview(payout, destination.reason);
       return;
     }
-
-    const entertainer = await this.prisma.entertainer.findUnique({
-      where: { id: payout.ledgerAccount.ownerId! },
-    });
-    if (!entertainer) {
-      await this.markForReview(payout, 'Entertainer for payable account not found');
-      return;
-    }
-
-    // Onboarding gate. Both halves matter: VERIFIED says we believe who they
-    // are, accountConfirmedAt says they confirmed the name the BANK returned for
-    // this account. Without the second, the destination is still just a number
-    // somebody typed - and that is the whole point of the resolve/confirm step.
-    if (entertainer.kycStatus !== 'VERIFIED' || !entertainer.accountConfirmedAt) {
+    if (destination.outcome === 'hold') {
+      // Not a failure: the obligation stands and the ledger is untouched, it
+      // just is not payable yet. Back to QUEUED so the sweep re-checks it once
+      // onboarding completes.
       if (payout.status !== 'QUEUED') {
         await this.prisma.payout.updateMany({
           where: { id: payout.id, status: payout.status },
           data: { status: 'QUEUED' },
         });
       }
-      this.logger.log('Payout held: entertainer onboarding incomplete', {
+      this.logger.log('Payout held: destination not ready', {
         payoutId,
-        entertainerId: entertainer.id,
-        kycStatus: entertainer.kycStatus,
-        accountConfirmed: entertainer.accountConfirmedAt !== null,
+        accountType: payout.ledgerAccount.type,
+        reason: destination.reason,
       });
       return;
     }
 
-    if (!entertainer.bankName || !entertainer.accountNumber) {
-      await this.markForReview(payout, 'Missing bank account details');
-      return;
-    }
-    // Onboarding now captures the provider's own bank code. Fall back to
-    // guessing from the bank name only for entertainers who predate that.
-    const bankCode = entertainer.bankCode ?? resolveBankCode(entertainer.bankName);
-    if (!bankCode) {
-      await this.markForReview(payout, `Unknown bank: ${entertainer.bankName}`);
-      return;
-    }
+    const { recipientName, bankCode, accountNumber, transferReason } = destination;
 
     // Claim the attempt and persist its reference before touching the
     // provider. The attempts guard means a concurrent worker loses the race.
@@ -151,11 +146,11 @@ export class PayoutsService {
     // reference; the retry verifies it first (see above).
     const recipient = await this.payoutProvider.createRecipient({
       type: 'nuban',
-      name: entertainer.legalName,
-      accountNumber: entertainer.accountNumber,
+      name: recipientName,
+      accountNumber,
       bankCode,
       currency: 'NGN',
-      metadata: { entertainerId: entertainer.id },
+      metadata: { ownerId: payout.ledgerAccount.ownerId, accountType: payout.ledgerAccount.type },
     });
     await this.prisma.payout.update({
       where: { id: payout.id },
@@ -166,7 +161,7 @@ export class PayoutsService {
       amountKobo: payout.amountKobo,
       recipientCode: recipient.recipientCode,
       reference: transferReference,
-      reason: `Splitcore tip payout - ${entertainer.stageName}`,
+      reason: transferReason,
       currency: 'NGN',
       metadata: { payoutId: payout.id, transactionId: payout.transactionId },
     });
@@ -187,6 +182,99 @@ export class PayoutsService {
       await this.flagForOperator(payout.id, transferReference);
     }
     // 'pending': the transfer.* webhook finishes it.
+  }
+
+  /**
+   * Where this payout is going, and whether it may go there yet.
+   *
+   *  - 'send'   : a confirmed destination; proceed.
+   *  - 'hold'   : onboarding is incomplete. The obligation stands, the ledger is
+   *               untouched, and the sweep will re-check it. Not a failure.
+   *  - 'review' : something a person has to fix (no such owner, no bank details,
+   *               an unresolvable bank).
+   *
+   * Both account types require accountConfirmedAt for the same reason: until
+   * somebody confirmed the name the BANK returned for the account, the
+   * destination is a number that was typed in. Entertainers additionally require
+   * KYC VERIFIED, because an entertainer is an unknown individual; a venue is a
+   * business already vetted at onboarding, which is why there is no
+   * identity-verification step on the venue side.
+   */
+  private async resolveDestination(payout: {
+    id: string;
+    ledgerAccount: { type: LedgerAccountType; ownerId: string | null };
+  }): Promise<PayoutDestination> {
+    const ownerId = payout.ledgerAccount.ownerId;
+    if (!ownerId) {
+      // PLATFORM_REVENUE and PROCESSOR_CLEARING have no owner and are never
+      // paid out; a payout row against one is a bug, not a destination.
+      return {
+        outcome: 'review',
+        reason: `Payable account has no owner (${payout.ledgerAccount.type})`,
+      };
+    }
+
+    if (payout.ledgerAccount.type === 'ENTERTAINER_PAYABLE') {
+      const entertainer = await this.prisma.entertainer.findUnique({ where: { id: ownerId } });
+      if (!entertainer) {
+        return { outcome: 'review', reason: 'Entertainer for payable account not found' };
+      }
+      if (entertainer.kycStatus !== 'VERIFIED' || !entertainer.accountConfirmedAt) {
+        return {
+          outcome: 'hold',
+          reason: `KYC ${entertainer.kycStatus}, account confirmed: ${entertainer.accountConfirmedAt !== null}`,
+        };
+      }
+      if (!entertainer.bankName || !entertainer.accountNumber) {
+        return { outcome: 'review', reason: 'Missing bank account details' };
+      }
+      // Onboarding captures the provider's own bank code; the name lookup is
+      // only a fallback for entertainers who predate that.
+      const bankCode = entertainer.bankCode ?? resolveBankCode(entertainer.bankName);
+      if (!bankCode) {
+        return { outcome: 'review', reason: `Unknown bank: ${entertainer.bankName}` };
+      }
+      return {
+        outcome: 'send',
+        // The legal name, not the stage name: the bank is being told who owns
+        // the account.
+        recipientName: entertainer.legalName,
+        bankCode,
+        accountNumber: entertainer.accountNumber,
+        transferReason: `Splitcore tip payout - ${entertainer.stageName}`,
+      };
+    }
+
+    if (payout.ledgerAccount.type === 'VENUE_PAYABLE') {
+      const venue = await this.prisma.venue.findUnique({ where: { id: ownerId } });
+      if (!venue) {
+        return { outcome: 'review', reason: 'Venue for payable account not found' };
+      }
+      if (!venue.accountConfirmedAt) {
+        return { outcome: 'hold', reason: 'Venue payout account not confirmed' };
+      }
+      if (!venue.bankName || !venue.accountNumber) {
+        return { outcome: 'review', reason: 'Missing venue bank account details' };
+      }
+      const bankCode = venue.bankCode ?? resolveBankCode(venue.bankName);
+      if (!bankCode) {
+        return { outcome: 'review', reason: `Unknown bank: ${venue.bankName}` };
+      }
+      return {
+        outcome: 'send',
+        // The name the bank returned, which is the account's real holder, rather
+        // than the venue's trading name.
+        recipientName: venue.resolvedAccountName ?? venue.name,
+        bankCode,
+        accountNumber: venue.accountNumber,
+        transferReason: `Splitcore venue payout - ${venue.name}`,
+      };
+    }
+
+    return {
+      outcome: 'review',
+      reason: `Unsupported payable account type: ${payout.ledgerAccount.type}`,
+    };
   }
 
   /**
@@ -309,33 +397,54 @@ export class PayoutsService {
   async enqueueDuePayouts(): Promise<number> {
     const candidates = await this.prisma.payout.findMany({
       where: {
-        ledgerAccount: { type: 'ENTERTAINER_PAYABLE' },
+        // Both payable types now, since a venue with a confirmed account is as
+        // payable as a verified entertainer.
+        ledgerAccount: { type: { in: ['ENTERTAINER_PAYABLE', 'VENUE_PAYABLE'] } },
         OR: [
           { status: { in: ['QUEUED', 'RETRYING'] } },
           { status: 'PROCESSING', updatedAt: { lt: new Date(Date.now() - STALE_PROCESSING_MS) } },
         ],
       },
-      select: { id: true, ledgerAccount: { select: { ownerId: true } } },
+      select: { id: true, ledgerAccount: { select: { ownerId: true, type: true } } },
       take: 500,
     });
 
-    const ownerIds = [...new Set(candidates.map((p) => p.ledgerAccount.ownerId!))];
-    const verified = new Set(
-      (
-        await this.prisma.entertainer.findMany({
-          // Same gate as processPayout, or the sweep would keep enqueueing
-          // payouts that processPayout then immediately holds again.
-          where: {
-            id: { in: ownerIds },
-            kycStatus: 'VERIFIED',
-            accountConfirmedAt: { not: null },
-          },
-          select: { id: true },
-        })
-      ).map((e) => e.id),
-    );
+    const ownerIdsFor = (type: LedgerAccountType) => [
+      ...new Set(
+        candidates
+          .filter((p) => p.ledgerAccount.type === type && p.ledgerAccount.ownerId)
+          .map((p) => p.ledgerAccount.ownerId!),
+      ),
+    ];
 
-    const due = candidates.filter((p) => verified.has(p.ledgerAccount.ownerId!));
+    // Each gate mirrors resolveDestination exactly. If they drifted, the sweep
+    // would enqueue payouts that processPayout then immediately holds again -
+    // busywork that looks like progress.
+    const [payableEntertainers, payableVenues] = await Promise.all([
+      this.prisma.entertainer.findMany({
+        where: {
+          id: { in: ownerIdsFor('ENTERTAINER_PAYABLE') },
+          kycStatus: 'VERIFIED',
+          accountConfirmedAt: { not: null },
+        },
+        select: { id: true },
+      }),
+      this.prisma.venue.findMany({
+        // No KYC equivalent for a venue: a business vetted at onboarding needs
+        // only a confirmed destination.
+        where: { id: { in: ownerIdsFor('VENUE_PAYABLE') }, accountConfirmedAt: { not: null } },
+        select: { id: true },
+      }),
+    ]);
+
+    const payable = new Set([
+      ...payableEntertainers.map((e) => e.id),
+      ...payableVenues.map((v) => v.id),
+    ]);
+
+    const due = candidates.filter(
+      (p) => p.ledgerAccount.ownerId && payable.has(p.ledgerAccount.ownerId),
+    );
     for (const payout of due) {
       await this.enqueue(payout.id);
     }

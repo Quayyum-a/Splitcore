@@ -47,15 +47,60 @@ Statuses: `CREATED`, `PENDING`, `SUCCESS`, `FAILED`, `ABANDONED`, `REVERSED`,
 
 ---
 
+---
+
+## Banks — **NEW**
+
+```
+GET /banks    → [{ name, code }]
+```
+
+Authenticated (any role). Not because the list is secret — Paystack's is public —
+but because an unauthenticated endpoint that proxies a third party is a free
+egress and cache-fill vector pointed at someone else's API, and nothing needs it
+before login: every caller that picks a bank already holds a session.
+
+The provider's own list, **cached 24h**, filtered to banks that are `active` and
+`supports_transfer` (offering one that can't receive a transfer only moves the
+failure later), sorted by name. ~263 usable banks for NGN.
+
+**Use the `code`, not the name.** Names are messy: Paystack calls them
+`Guaranty Trust Bank`, `United Bank For Africa`, `First City Monument Bank` —
+nobody types those. `bankName` is accepted and resolved, including an alias layer
+for the colloquial forms (GTBank, UBA, FCMB, First Bank), but an ambiguous name
+is a **400 listing the candidates** rather than a guess: "First Bank" and
+"First Bank MFB" are different destinations.
+
 ## Entertainer KYC — **NEW**, the five-step flow
 
-All under `/entertainers/:entertainerId/kyc`. Callable by `PLATFORM_ADMIN`,
-`VENUE_ADMIN` (own venue only) and `ENTERTAINER` (self only). Every response is
-the same `KycStatus` object, so a client can drive the whole flow from one shape.
+All under `/entertainers/:entertainerId/kyc`. Every response is the same
+`KycStatus` object, so a client can drive the whole flow from one shape.
+
+**Who may call what — this asymmetry is deliberate, not an oversight:**
+
+| Step | Who |
+|---|---|
+| `status`, `bank-details`, `resolve-account` | `PLATFORM_ADMIN`, `VENUE_ADMIN` (own venue), `ENTERTAINER` (self) |
+| **`confirm-account`** | **`ENTERTAINER` only** |
+| **`verify-identity`** | **`ENTERTAINER` only** |
+| `review` | `PLATFORM_ADMIN` only |
+
+Capturing and resolving bank details asserts nothing *about* the entertainer —
+`resolve-account` only asks the bank a question — so admin-assisted bootstrapping
+is a genuine convenience. Everything that makes a claim about the entertainer is
+theirs alone. `confirm-account` previously allowed `VENUE_ADMIN`, which meant a
+venue admin could submit, resolve and self-confirm a bank account for any
+entertainer at their venue and the record was indistinguishable from the
+entertainer doing it. There is no admin override: if an entertainer can't reach
+the link, issue them a login link rather than confirming for them.
+
+**Frontend consequence:** the confirm and identity steps require an
+`ENTERTAINER` session from `POST /entertainer-auth/sessions`. A venue-admin
+onboarding screen can get someone to step 2 but cannot finish it.
 
 ```
 GET  /status            → current state + nextStep
-POST /bank-details      {bankName, bankCode, accountNumber}   → step 1
+POST /bank-details      {accountNumber, bankCode | bankName}  → step 1
 POST /resolve-account   (no body)                             → step 2
 POST /confirm-account   {confirmedAccountName}                → step 3
 POST /verify-identity   {documentType: 'BVN'|'NIN', documentNumber}  → step 4
@@ -181,6 +226,74 @@ Statuses `QUEUED`, `PROCESSING`, `SUCCESS`, `FAILED`, `RETRYING`, `CANCELLED`.
 
 ---
 
+---
+
+## Venue payout account — **NEW**
+
+```
+GET  /venues/:venueId/payout-account/status
+POST /venues/:venueId/payout-account/bank-details    {accountNumber, bankCode | bankName}
+POST /venues/:venueId/payout-account/resolve-account
+POST /venues/:venueId/payout-account/confirm-account {confirmedAccountName}
+```
+
+`VENUE_ADMIN` (own venue) or `PLATFORM_ADMIN` throughout — including confirm.
+Unlike the entertainer case, the venue admin *is* the account holder's
+representative, so them confirming their own venue's account is the correct party,
+not a bypass.
+
+Three steps, not four: **no identity verification.** A venue is a business entity
+vetted when it was onboarded, so "is this really you?" is already answered; the
+open question is only whether the account belongs to it, which resolve/confirm
+answers. Stated as the judgment call it is.
+
+Response is the same shape as entertainer KYC status, so one component drives both:
+
+```json
+{
+  "venueId": "uuid", "venueName": "Quilox Nightclub",
+  "nextStep": "BANK_DETAILS|RESOLVE_ACCOUNT|CONFIRM_ACCOUNT|DONE",
+  "bankName": "Guaranty Trust Bank", "bankCode": "058",
+  "accountNumberMasked": "******6789",
+  "resolvedAccountName": "QUILOX ENTERTAINMENT LIMITED",
+  "accountResolvedAt": "...", "accountConfirmedAt": null,
+  "payoutsEnabled": false
+}
+```
+
+Changing the account clears resolution and confirmation. Until
+`accountConfirmedAt` is set, the venue's `VENUE_PAYABLE` balance accrues and nothing
+moves; once set, the existing payout sweep picks it up through the same
+recipient → transfer → retry machinery as entertainers, with the same
+never-drop-the-liability guarantee.
+
+---
+
+## Venue payouts: the venue's share is a SEPARATE list — **CHANGED**
+
+```
+GET /venues/:venueId/payouts       → payouts to ENTERTAINERS who performed here
+GET /venues/:venueId/own-payouts   → the VENUE'S OWN share        ← NEW
+```
+
+`/payouts` no longer includes the venue's own share. Two endpoints rather than one
+flagged list, so the two can never be rendered as one undifferentiated set of
+rows: "₦475,000 — DJ Neptune" and "₦475,000 — the venue" sitting next to each
+other is how a venue ends up adding the wrong column. On `own-payouts`,
+`entertainerName` is always `null` because the recipient is the venue.
+
+`GET /venues/:venueId/overview` gains three fields:
+
+| Field | Meaning |
+|---|---|
+| `ownPendingPayoutsKobo` | The venue's own unpaid share — a **subset** of `pendingPayoutsKobo`, never a separate total to add to it |
+| `ownPaidOutKobo` | The venue's own share already transferred |
+| `ownPayoutAccountConfirmed` | `false` means its share accrues and nothing moves — link to the payout-account flow |
+
+`pendingPayoutsKobo` keeps its existing meaning (everything unpaid from
+transactions here, venue + entertainers) so the existing tile doesn't change
+underneath anyone.
+
 ## Split rules and platform fee (from round 2, live)
 
 ```
@@ -219,11 +332,11 @@ domain, never the API's.
 
 | Gap | Consequence |
 |---|---|
-| **No bank-list endpoint** | `bankCode` has to come from somewhere. Either hardcode the ~20 names in `src/payouts/bank-codes.ts`, or call Paystack's `GET /bank` from the frontend. A backend passthrough would be the better fix — not built |
 | **Identity verification unavailable** | Every entertainer lands in `REVIEW`. Build for that state as the normal outcome today |
 | **No notification delivery** | Consent links and entertainer login links are returned in API responses for manual delivery |
 | **No webhook processing in production** | Always rely on `GET /payments/:reference/status`; never assume a webhook settled anything |
 | **No `/auth/me`** | Get the venue from `GET /venues` (returns one for a venue admin) |
+| **Venue payouts need a confirmed account** | A venue's share accrues until `payout-account/confirm-account` is done. Surface `ownPayoutAccountConfirmed` from the overview |
 | **`platformBps` on old split rules** | Rules pre-dating governance are `origin: ADMIN_OVERRIDE`. Don't present those as mutually agreed |
 
 Re-run the audit rather than trusting this file once time has passed:

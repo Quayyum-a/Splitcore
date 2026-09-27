@@ -41,6 +41,11 @@ export class KycController {
     return this.kyc.getStatus(id);
   }
 
+  // Admin-assisted on purpose, unlike confirm-account and verify-identity
+  // below. Capturing and resolving bank details asserts nothing about identity -
+  // resolve-account only asks the bank a question - so a venue admin helping an
+  // entertainer get started is a genuine convenience. The asymmetry is the
+  // point: everything that makes a claim ABOUT the entertainer is theirs alone.
   @Post('bank-details')
   @Roles(Role.PLATFORM_ADMIN, Role.VENUE_ADMIN, Role.ENTERTAINER)
   @EntertainerScoped()
@@ -77,17 +82,35 @@ export class KycController {
     return this.kyc.resolveAccount(id);
   }
 
+  // ENTERTAINER only, and deliberately not PLATFORM_ADMIN either.
+  //
+  // This is the one step whose entire meaning is "the real account holder says
+  // this account is theirs". While VENUE_ADMIN could reach it, a venue admin
+  // could submit bank details, resolve them, and confirm them for any
+  // entertainer at their venue - their own account included - and the record
+  // was indistinguishable from the entertainer having done it. An admin
+  // confirming on someone's behalf is not a convenience, it is the fraud this
+  // step exists to prevent.
+  //
+  // There is therefore no admin override. If an entertainer cannot reach the
+  // link, the remedy is to get them a login link, not to confirm for them.
   @Post('confirm-account')
-  @Roles(Role.PLATFORM_ADMIN, Role.VENUE_ADMIN, Role.ENTERTAINER)
+  @Roles(Role.ENTERTAINER)
   @EntertainerScoped()
   @ApiOperation({
-    summary: 'Step 3 - confirm the resolved name is the entertainer',
+    summary: 'Step 3 - confirm the resolved name is the entertainer (ENTERTAINER only)',
     description:
       'The submitted name must match what the bank returned, compared case- and spacing- ' +
-      'insensitively. This is the step that makes a payout destination trusted rather than typed.',
+      'insensitively. This is the step that makes a payout destination trusted rather than typed, ' +
+      'so only the entertainer themselves can perform it - not a venue admin, and not a platform ' +
+      'admin. Requires an entertainer session from POST /entertainer-auth/sessions.',
   })
   @ApiResponse({ status: 201, type: KycStatusResponseDto })
   @ApiResponse({ status: 400, description: 'Not resolved yet, or the name does not match' })
+  @ApiResponse({
+    status: 403,
+    description: 'Only the entertainer may confirm their own account',
+  })
   async confirm(
     @Param('entertainerId') id: string,
     @Body() dto: ConfirmAccountDto,
@@ -95,11 +118,15 @@ export class KycController {
     return this.kyc.confirmAccount(id, dto.confirmedAccountName);
   }
 
+  // ENTERTAINER only, for the same reason plus one more: submitting someone
+  // else's BVN or NIN is not a thing any admin should be positioned to do, and
+  // a role that can do it is a role that can be compelled or compromised into
+  // doing it.
   @Post('verify-identity')
-  @Roles(Role.PLATFORM_ADMIN, Role.VENUE_ADMIN, Role.ENTERTAINER)
+  @Roles(Role.ENTERTAINER)
   @EntertainerScoped()
   @ApiOperation({
-    summary: 'Step 4 - identity verification (BVN/NIN)',
+    summary: 'Step 4 - identity verification (BVN/NIN) (ENTERTAINER only)',
     description:
       'The document number is forwarded to the provider and never stored, logged or returned - only ' +
       'the document type and the outcome are kept. If the provider cannot run the check (Paystack ' +
@@ -108,6 +135,10 @@ export class KycController {
   })
   @ApiResponse({ status: 201, type: KycStatusResponseDto })
   @ApiResponse({ status: 400, description: 'The bank account has not been confirmed yet' })
+  @ApiResponse({
+    status: 403,
+    description: 'Only the entertainer may submit their own identity document',
+  })
   @ApiResponse({ status: 409, description: 'Already verified' })
   async verifyIdentity(
     @Param('entertainerId') id: string,

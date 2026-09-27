@@ -80,14 +80,32 @@ export class VenueDashboardController {
   @Roles(Role.PLATFORM_ADMIN, Role.VENUE_ADMIN)
   @VenueScoped()
   @ApiOperation({
-    summary: 'Payout history for a venue (Entertainer / Amount / Status / Reference / Time)',
+    summary:
+      'ENTERTAINER payout history for a venue (Entertainer / Amount / Status / Reference / Time)',
     description:
-      'Payouts arising from payments at this venue, newest first. failureReason carries the ' +
-      'operator-facing explanation when a transfer needs human action.',
+      'Payouts to the entertainers who performed here, newest first. Deliberately excludes the ' +
+      "venue's own share - see GET /venues/{venueId}/own-payouts. Merging the two would put " +
+      '"475,000 kobo to DJ Neptune" and "475,000 kobo to the venue" indistinguishably in one ' +
+      'list, and a venue reconciling what it is owed would add up the wrong column.',
   })
-  @ApiResponse({ status: 200, description: 'Paginated payouts' })
+  @ApiResponse({ status: 200, description: 'Paginated entertainer payouts' })
   async payouts(@Param('venueId') venueId: string, @Query() query: PaginationQueryDto) {
     return this.dashboard.venuePayouts(venueId, query.limit, query.offset);
+  }
+
+  @Get('own-payouts')
+  @Roles(Role.PLATFORM_ADMIN, Role.VENUE_ADMIN)
+  @VenueScoped()
+  @ApiOperation({
+    summary: "The venue's OWN payout history (its share, not its entertainers')",
+    description:
+      "Payouts against this venue's VENUE_PAYABLE account. A separate endpoint rather than a flag " +
+      'on the list above, so the two can never be rendered as one undifferentiated set of rows. ' +
+      'entertainerName is always null here, because the recipient is the venue itself.',
+  })
+  @ApiResponse({ status: 200, description: 'Paginated venue-own payouts' })
+  async ownPayouts(@Param('venueId') venueId: string, @Query() query: PaginationQueryDto) {
+    return this.dashboard.venueOwnPayouts(venueId, query.limit, query.offset);
   }
 }
 

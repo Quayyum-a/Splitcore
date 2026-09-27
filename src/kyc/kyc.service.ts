@@ -14,6 +14,7 @@ import {
   IdentityDocumentType,
 } from './interfaces/kyc-provider.interface';
 import { AccountResolutionError } from './providers/paystack-kyc.provider';
+import { BanksService } from '../banks/banks.service';
 
 /** The five steps of the spec's onboarding flow, in order. */
 export type KycStep =
@@ -55,6 +56,7 @@ export class KycService {
   constructor(
     private readonly prisma: PrismaService,
     @Inject(KYC_PROVIDER) private readonly provider: KycProvider,
+    private readonly banks: BanksService,
   ) {}
 
   async getStatus(entertainerId: string): Promise<KycStatusView> {
@@ -64,19 +66,24 @@ export class KycService {
   /** Step 1. Capturing details resets any previous verification for this account. */
   async submitBankDetails(
     entertainerId: string,
-    input: { bankName: string; bankCode: string; accountNumber: string },
+    input: { bankName?: string; bankCode?: string; accountNumber: string },
   ): Promise<KycStatusView> {
     const entertainer = await this.find(entertainerId);
     this.assertNotSuspended(entertainer);
 
+    // Resolved against the provider's live list, so the stored code is always a
+    // real bank and the stored name is always that bank's own name rather than
+    // whatever was typed. Throws 400 on an unknown or ambiguous input.
+    const bank = await this.banks.resolve(input);
+
     const changed =
-      entertainer.accountNumber !== input.accountNumber || entertainer.bankCode !== input.bankCode;
+      entertainer.accountNumber !== input.accountNumber || entertainer.bankCode !== bank.code;
 
     const updated = await this.prisma.entertainer.update({
       where: { id: entertainerId },
       data: {
-        bankName: input.bankName,
-        bankCode: input.bankCode,
+        bankName: bank.name,
+        bankCode: bank.code,
         accountNumber: input.accountNumber,
         // New destination, so everything downstream of it is stale. Keeping a
         // prior confirmation would let someone swap the account number after
@@ -97,7 +104,7 @@ export class KycService {
       },
     });
 
-    this.logger.log('Bank details captured', { entertainerId, bankCode: input.bankCode });
+    this.logger.log('Bank details captured', { entertainerId, bankCode: bank.code });
     return this.toView(updated);
   }
 

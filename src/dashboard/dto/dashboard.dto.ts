@@ -33,10 +33,33 @@ export class VenueOverviewResponseDto {
   @ApiProperty({
     example: 2100000,
     description:
-      'Obligations owed but not yet paid out, in kobo - QUEUED, RETRYING or PROCESSING. This is a ' +
+      'Everything owed but not yet paid out from transactions at this venue, in kobo - QUEUED, ' +
+      "RETRYING or PROCESSING. Includes both the venue's own share and its entertainers'. A " +
       'balance as it stands now, not a figure for the window.',
   })
   pendingPayoutsKobo!: number;
+
+  @ApiProperty({
+    example: 950000,
+    description:
+      "The venue's OWN share of that, in kobo - a subset of pendingPayoutsKobo, never a separate " +
+      'total to be added to it.',
+  })
+  ownPendingPayoutsKobo!: number;
+
+  @ApiProperty({
+    example: 4275000,
+    description: "The venue's own share already transferred successfully, in kobo.",
+  })
+  ownPaidOutKobo!: number;
+
+  @ApiProperty({
+    example: false,
+    description:
+      "Whether the venue's payout account is confirmed. False means its own share accrues and " +
+      'nothing moves - see GET /venues/{venueId}/payout-account/status.',
+  })
+  ownPayoutAccountConfirmed!: boolean;
 }
 
 export class EntertainerEarningsRowDto {

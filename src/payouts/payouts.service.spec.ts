@@ -56,6 +56,29 @@ function makeEntertainer(overrides: Record<string, unknown> = {}) {
   };
 }
 
+function venuePayout(overrides: Partial<PayoutRow> = {}): PayoutRow {
+  return makePayout({
+    ledgerAccount: { type: 'VENUE_PAYABLE', ownerId: 'venue-1' },
+    ...overrides,
+  });
+}
+
+function makeVenue(overrides: Record<string, unknown> = {}) {
+  return {
+    id: 'venue-1',
+    name: 'Quilox Nightclub',
+    bankName: 'Guaranty Trust Bank',
+    bankCode: '058',
+    accountNumber: '0123456789',
+    resolvedAccountName: 'QUILOX ENTERTAINMENT LIMITED',
+    accountResolvedAt: new Date('2026-01-01T00:00:00Z'),
+    // A venue needs only a confirmed destination - there is no KYC equivalent,
+    // because a venue is a business vetted when it was onboarded.
+    accountConfirmedAt: new Date('2026-01-01T00:00:00Z'),
+    ...overrides,
+  };
+}
+
 function buildHarness() {
   const tx = {
     payout: {
@@ -72,6 +95,10 @@ function buildHarness() {
       updateMany: jest.fn().mockResolvedValue({ count: 1 }),
     },
     entertainer: {
+      findUnique: jest.fn(),
+      findMany: jest.fn().mockResolvedValue([]),
+    },
+    venue: {
       findUnique: jest.fn(),
       findMany: jest.fn().mockResolvedValue([]),
     },
@@ -232,16 +259,81 @@ describe('PayoutsService.processPayout', () => {
       expect(h.ledgerRepository.post).not.toHaveBeenCalled();
     });
 
-    it('leaves a venue payout queued, since venue destinations are not modelled yet', async () => {
+    // Venue payouts used to be unreachable: VENUE_PAYABLE obligations accrued
+    // forever because no destination was modelled. They now go through exactly
+    // the same machinery as an entertainer's.
+    it('holds a venue payout while the venue account is unconfirmed', async () => {
       const h = buildHarness();
-      h.prisma.payout.findUnique.mockResolvedValue(
-        makePayout({ ledgerAccount: { type: 'VENUE_PAYABLE', ownerId: 'venue-1' } }),
+      h.prisma.payout.findUnique.mockResolvedValue(venuePayout());
+      h.prisma.venue.findUnique.mockResolvedValue(makeVenue({ accountConfirmedAt: null }));
+
+      await h.service.processPayout('payout-1');
+
+      expect(h.provider.initiateTransfer).not.toHaveBeenCalled();
+      expect(h.ledgerRepository.post).not.toHaveBeenCalled();
+    });
+
+    it('sends a venue payout once the venue account is confirmed', async () => {
+      const h = buildHarness();
+      h.prisma.payout.findUnique.mockResolvedValue(venuePayout());
+      h.prisma.venue.findUnique.mockResolvedValue(makeVenue());
+
+      await h.service.processPayout('payout-1');
+
+      expect(h.provider.createRecipient).toHaveBeenCalledWith(
+        expect.objectContaining({
+          // The name the BANK returned, not the venue's trading name.
+          name: 'QUILOX ENTERTAINMENT LIMITED',
+          accountNumber: '0123456789',
+          bankCode: '058',
+        }),
+      );
+      expect(h.provider.initiateTransfer).toHaveBeenCalledTimes(1);
+    });
+
+    it('sends a venue payout with no bank details to manual review', async () => {
+      const h = buildHarness();
+      h.prisma.payout.findUnique.mockResolvedValue(venuePayout());
+      h.prisma.venue.findUnique.mockResolvedValue(
+        makeVenue({ bankName: null, accountNumber: null }),
       );
 
       await h.service.processPayout('payout-1');
 
       expect(h.provider.initiateTransfer).not.toHaveBeenCalled();
-      expect(h.prisma.payout.updateMany).not.toHaveBeenCalled();
+      expect(h.prisma.payout.updateMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({ failureReason: expect.stringMatching(/^MANUAL_REVIEW/) }),
+        }),
+      );
+    });
+
+    it('sends a venue payout for an unknown venue to manual review', async () => {
+      const h = buildHarness();
+      h.prisma.payout.findUnique.mockResolvedValue(venuePayout());
+      h.prisma.venue.findUnique.mockResolvedValue(null);
+
+      await h.service.processPayout('payout-1');
+
+      expect(h.provider.initiateTransfer).not.toHaveBeenCalled();
+    });
+
+    // PLATFORM_REVENUE and PROCESSOR_CLEARING have no owner and are never paid
+    // out; a payout row against one is a bug, so it needs a person, not a retry.
+    it('sends a payout against an ownerless account to manual review', async () => {
+      const h = buildHarness();
+      h.prisma.payout.findUnique.mockResolvedValue(
+        makePayout({ ledgerAccount: { type: 'PLATFORM_REVENUE', ownerId: null } }),
+      );
+
+      await h.service.processPayout('payout-1');
+
+      expect(h.provider.initiateTransfer).not.toHaveBeenCalled();
+      expect(h.prisma.payout.updateMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({ failureReason: expect.stringMatching(/^MANUAL_REVIEW/) }),
+        }),
+      );
     });
 
     it('sends a payout with missing bank details to manual review', async () => {

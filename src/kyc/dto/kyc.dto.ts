@@ -1,21 +1,44 @@
-import { ApiProperty } from '@nestjs/swagger';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { KycStatus } from '@prisma/client';
-import { IsIn, IsString, Matches, MinLength } from 'class-validator';
+import { IsIn, IsOptional, IsString, Matches, MinLength } from 'class-validator';
 
+/**
+ * Bank details.
+ *
+ * `bankCode` used to be required and validated only as "3-6 digits", with nothing
+ * to check it against - so a transposed digit named a real but different bank,
+ * and the mistake surfaced as a transfer to a stranger. Both fields are now
+ * optional-but-one-required, and whichever arrives is resolved against the
+ * provider's live list (GET /banks); an unrecognised or ambiguous input is a 400.
+ *
+ * `bankCode` is the better input - unambiguous, and exactly what GET /banks
+ * returns - and is kept for that reason, not for backwards compatibility.
+ * `bankName` exists so a caller can accept a typed name and still be told
+ * clearly when it is ambiguous.
+ */
 export class SubmitBankDetailsDto {
-  @ApiProperty({ description: 'Bank name as shown to the entertainer', example: 'GTBank' })
+  @ApiPropertyOptional({
+    description:
+      'Bank name, resolved against GET /banks. Rejected if it matches nothing, or if it matches ' +
+      'more than one bank - "First Bank" and "First Bank MFB" are different destinations, so it ' +
+      'asks rather than choosing. Either this or bankCode is required.',
+    example: 'GTBank',
+  })
+  @IsOptional()
   @IsString()
   @MinLength(2)
-  bankName!: string;
+  bankName?: string;
 
-  @ApiProperty({
+  @ApiPropertyOptional({
     description:
-      "Provider bank code. Fetched from the provider's bank list, not guessed from the name.",
+      'Provider bank code from GET /banks. Preferred over bankName. Validated against the live ' +
+      'list, so a typo is rejected rather than silently naming another bank.',
     example: '058',
   })
+  @IsOptional()
   @IsString()
   @Matches(/^\d{3,6}$/, { message: 'bankCode must be a 3-6 digit provider bank code' })
-  bankCode!: string;
+  bankCode?: string;
 
   @ApiProperty({ description: 'NUBAN account number (10 digits)', example: '0123456789' })
   @IsString()

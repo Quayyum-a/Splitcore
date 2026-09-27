@@ -8,6 +8,16 @@ export interface ResolvedAccount {
   accountName: string;
 }
 
+/** A bank as the provider reports it. */
+export interface ProviderBank {
+  name: string;
+  code: string;
+  /** Inactive banks must not be offered as a payout destination. */
+  active: boolean;
+  /** Nor must ones that cannot receive a transfer. */
+  supportsTransfer: boolean;
+}
+
 export type IdentityDocumentType = 'BVN' | 'NIN';
 
 /**
@@ -35,6 +45,12 @@ export interface IdentityCheckResult {
  */
 export interface KycProvider {
   readonly name: string;
+
+  /**
+   * Every bank the provider can pay into. Callers are expected to cache this;
+   * it changes on the order of weeks.
+   */
+  listBanks(): Promise<ProviderBank[]>;
 
   /**
    * Ask the bank who owns this account. The returned name is shown to the
